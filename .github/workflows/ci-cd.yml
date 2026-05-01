@@ -3,6 +3,7 @@ name: CI — CD pipeline
 on:
   push:
     branches: [ main ]
+    tags: [ 'v*.*.*' ]
     paths:
       - "apps/user-svc/**"
       - "apps/api-gateway/**"
@@ -12,7 +13,8 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
-      - ".github/workflows/ci-user-api-gateway.yml"
+      - "turbo.json"
+      - ".github/workflows/ci-cd.yml"
       - ".github/actions/**"
       - ".prettierrc"
       - ".prettierignore"
@@ -43,7 +45,8 @@ on:
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
-      - ".github/workflows/ci-user-api-gateway.yml"
+      - "turbo.json"
+      - ".github/workflows/ci-cd.yml"
       - ".github/actions/**"
       - ".prettierrc"
       - ".prettierignore"
@@ -83,7 +86,7 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Cache Turbo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -112,7 +115,7 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Cache Turbo
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: .turbo
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -123,56 +126,68 @@ jobs:
         run: pnpm run build:services
 
   docker:
-    name: Containerize (tag only)
+    name: Build & push image (${{ matrix.service }})
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-svc, shop-svc, order-svc]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Prepare Docker build context
-        run: mkdir -p packages
-
-      - name: Docker build user-svc
+      - name: Resolve namespace
+        id: ns
+        env:
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
         run: |
-          docker build \
-            -f apps/user-svc/Dockerfile \
-            -t shop-nest/user-svc:${{ github.sha }} \
-            -t shop-nest/user-svc:ci \
-            .
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::Set repo variable DOCKERHUB_NAMESPACE (Settings → Variables) or secret DOCKERHUB_USERNAME"
+            exit 1
+          fi
+          echo "namespace=$DOCKERHUB_NAMESPACE" >> "$GITHUB_OUTPUT"
 
-      - name: Docker build api-gateway
-        run: |
-          docker build \
-            -f apps/api-gateway/Dockerfile \
-            -t shop-nest/api-gateway:${{ github.sha }} \
-            -t shop-nest/api-gateway:ci \
-            .
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
 
-      - name: Docker build shop-svc
-        run: |
-          docker build \
-            -f apps/shop-svc/Dockerfile \
-            -t shop-nest/shop-svc:${{ github.sha }} \
-            -t shop-nest/shop-svc:ci \
-            .
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Docker build order-svc
-        run: |
-          docker build \
-            -f apps/order-svc/Dockerfile \
-            -t shop-nest/order-svc:${{ github.sha }} \
-            -t shop-nest/order-svc:ci \
-            .
+      - name: Login to Docker Hub
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: List images
-        run: |
-          echo "user-svc"
-          docker images shop-nest/user-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
-          echo "api-gateway"
-          docker images shop-nest/api-gateway --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
-          echo "shop-svc"
-          docker images shop-nest/shop-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
-          echo "order-svc"
-          docker images shop-nest/order-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ns.outputs.namespace }}/shop-${{ matrix.service }}
+          tags: |
+            type=sha,format=short
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=shop-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=shop-${{ matrix.service }}
+          provenance: false
