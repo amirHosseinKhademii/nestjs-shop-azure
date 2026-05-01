@@ -42,8 +42,7 @@ const userSvcEnv = join(__dirname, '..', '.env');
         if (databaseUrl) {
           // If the URL already sets sslmode= or targets Neon, let the driver parse TLS from the URL only.
           // Adding TypeORM `ssl` on top duplicates config and can trigger pg forward-compat warnings.
-          const tlsFromUrl =
-            /sslmode=/i.test(databaseUrl) || /\.neon\.tech\b/i.test(databaseUrl);
+          const tlsFromUrl = /sslmode=/i.test(databaseUrl) || /\.neon\.tech\b/i.test(databaseUrl);
           return {
             type: 'postgres',
             url: databaseUrl,

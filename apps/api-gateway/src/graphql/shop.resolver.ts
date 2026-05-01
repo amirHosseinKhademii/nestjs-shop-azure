@@ -1,12 +1,9 @@
 import { Resolver, Query, Mutation, Args, Context, Int } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { UnauthorizedException, UseGuards } from '@nestjs/common';
 import { GqlJwtGuard } from './gql-jwt.guard';
-import {
-  ProductGql,
-  CartGql,
-  CheckoutResultGql,
-} from './types';
+import { ProductGql, CartGql, CheckoutResultGql } from './types';
 import { BackendHttpService } from '../backend-http.service';
+import type { GatewayGraphqlContext, ShopProductDto } from './graphql-context';
 
 @Resolver()
 export class ShopResolver {
@@ -15,7 +12,7 @@ export class ShopResolver {
   @Query(() => [ProductGql])
   async products(@Context() ctx: { correlationId?: string }) {
     const raw = await this.backend.products(ctx.correlationId);
-    return raw.map((p: any) => ({
+    return (raw as ShopProductDto[]).map((p) => ({
       id: String(p._id ?? p.id),
       name: p.name,
       description: p.description,
@@ -32,7 +29,7 @@ export class ShopResolver {
     @Args('stock', { nullable: true, type: () => Int }) stock?: number,
     @Context() ctx?: { correlationId?: string },
   ) {
-    const p = await this.backend.createProduct(
+    const created = (await this.backend.createProduct(
       {
         name,
         priceCents,
@@ -40,31 +37,33 @@ export class ShopResolver {
         stock,
       },
       ctx?.correlationId,
-    );
+    )) as ShopProductDto;
     return {
-      id: String((p as any)._id ?? (p as any).id),
-      name: (p as any).name,
-      description: (p as any).description,
-      priceCents: (p as any).priceCents,
-      stock: (p as any).stock,
+      id: String(created._id ?? created.id),
+      name: created.name,
+      description: created.description,
+      priceCents: created.priceCents,
+      stock: created.stock,
     };
   }
 
   @Query(() => CartGql)
   @UseGuards(GqlJwtGuard)
-  async cart(@Context() ctx: { req: any; correlationId?: string }) {
-    const userId = ctx.req.user.sub as string;
+  async cart(@Context() ctx: GatewayGraphqlContext) {
+    const userId = ctx.req.user?.sub;
+    if (!userId) throw new UnauthorizedException();
     return this.backend.cart(userId, ctx.correlationId) as Promise<CartGql>;
   }
 
   @Mutation(() => CartGql)
   @UseGuards(GqlJwtGuard)
   async addToCart(
-    @Context() ctx: { req: any; correlationId?: string },
+    @Context() ctx: GatewayGraphqlContext,
     @Args('productId') productId: string,
     @Args('qty', { type: () => Int }) qty: number,
   ) {
-    const userId = ctx.req.user.sub as string;
+    const userId = ctx.req.user?.sub;
+    if (!userId) throw new UnauthorizedException();
     return this.backend.addToCart(
       userId,
       { productId, qty },
@@ -74,8 +73,9 @@ export class ShopResolver {
 
   @Mutation(() => CheckoutResultGql)
   @UseGuards(GqlJwtGuard)
-  async checkout(@Context() ctx: { req: any; correlationId?: string }) {
-    const userId = ctx.req.user.sub as string;
+  async checkout(@Context() ctx: GatewayGraphqlContext) {
+    const userId = ctx.req.user?.sub;
+    if (!userId) throw new UnauthorizedException();
     const correlationId = ctx.req.correlationId ?? ctx.correlationId;
     return this.backend.checkout(userId, correlationId) as Promise<CheckoutResultGql>;
   }

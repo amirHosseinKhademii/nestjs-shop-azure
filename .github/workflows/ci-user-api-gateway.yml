@@ -1,0 +1,109 @@
+name: CI — user-svc & api-gateway
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/user-svc/**'
+      - 'apps/api-gateway/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/ci-user-api-gateway.yml'
+      - '.prettierrc'
+      - '.prettierignore'
+      - 'apps/user-svc/eslint.config.mjs'
+      - 'apps/user-svc/jest.config.cjs'
+      - 'apps/user-svc/tsconfig.build.json'
+      - 'apps/api-gateway/eslint.config.mjs'
+      - 'apps/api-gateway/jest.config.cjs'
+      - 'apps/api-gateway/tsconfig.build.json'
+      - 'apps/user-svc/Dockerfile'
+      - 'apps/api-gateway/Dockerfile'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/user-svc/**'
+      - 'apps/api-gateway/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/ci-user-api-gateway.yml'
+      - '.prettierrc'
+      - '.prettierignore'
+      - 'apps/user-svc/eslint.config.mjs'
+      - 'apps/user-svc/jest.config.cjs'
+      - 'apps/user-svc/tsconfig.build.json'
+      - 'apps/api-gateway/eslint.config.mjs'
+      - 'apps/api-gateway/jest.config.cjs'
+      - 'apps/api-gateway/tsconfig.build.json'
+      - 'apps/user-svc/Dockerfile'
+      - 'apps/api-gateway/Dockerfile'
+
+concurrency:
+  group: ci-user-gateway-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Prettier
+        run: pnpm run format:check
+
+      - name: ESLint
+        run: pnpm run lint:services
+
+      - name: Typecheck
+        run: pnpm run typecheck:services
+
+      - name: Test
+        run: pnpm run test:services
+
+      - name: Build
+        run: pnpm run build:services
+
+      - name: Prepare Docker build context
+        run: mkdir -p packages
+
+      - name: Docker build user-svc (tag only, no push)
+        run: |
+          docker build \
+            -f apps/user-svc/Dockerfile \
+            -t shop-nest/user-svc:${{ github.sha }} \
+            -t shop-nest/user-svc:ci \
+            .
+
+      - name: Docker build api-gateway (tag only, no push)
+        run: |
+          docker build \
+            -f apps/api-gateway/Dockerfile \
+            -t shop-nest/api-gateway:${{ github.sha }} \
+            -t shop-nest/api-gateway:ci \
+            .
+
+      - name: List built images
+        run: |
+          echo "user-svc"
+          docker images shop-nest/user-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
+          echo "api-gateway"
+          docker images shop-nest/api-gateway --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'

@@ -1,13 +1,14 @@
 import './tracing';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { AppModule } from './app.module';
 import { randomUUID } from 'crypto';
+import type { NextFunction, Request, Response } from 'express';
+import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   app.enableShutdownHooks();
-  app.use((req: any, res: any, next: any) => {
+  app.use((req: Request & { correlationId?: string }, res: Response, next: NextFunction) => {
     const id = (req.headers['x-correlation-id'] as string) ?? randomUUID();
     req.correlationId = id;
     res.setHeader('x-correlation-id', id);

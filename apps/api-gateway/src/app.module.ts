@@ -13,6 +13,11 @@ import { OrderResolver } from './graphql/order.resolver';
 import { BackendHttpService } from './backend-http.service';
 import { GqlJwtGuard } from './graphql/gql-jwt.guard';
 import { GqlThrottlerGuard } from './graphql/gql-throttler.guard';
+import {
+  pickCorrelationId,
+  type ApolloContextFactoryArgs,
+  type GatewayGraphqlContext,
+} from './graphql/graphql-context';
 import { HealthController } from './health.controller';
 
 @Module({
@@ -25,10 +30,10 @@ import { HealthController } from './health.controller';
       useFactory: () => ({
         autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
         sortSchema: true,
-        context: ({ req, res }: { req: any; res: any }) => ({
-          req,
+        context: ({ req, res }: ApolloContextFactoryArgs): GatewayGraphqlContext => ({
+          req: req as GatewayGraphqlContext['req'],
           res,
-          correlationId: req.correlationId ?? req.headers['x-correlation-id'],
+          correlationId: pickCorrelationId(req),
         }),
       }),
     }),

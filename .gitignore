@@ -20,6 +20,5 @@ apps/shop-svc/
 apps/web/
 packages/
 infra/
-.github/
 azure-pipelines.yml
 docker-compose.yml

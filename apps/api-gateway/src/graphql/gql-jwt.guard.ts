@@ -1,11 +1,7 @@
-import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { GqlExecutionContext } from '@nestjs/graphql';
 import { JwtService } from '@nestjs/jwt';
+import type { GatewayGraphqlContext } from './graphql-context';
 
 @Injectable()
 export class GqlJwtGuard implements CanActivate {
@@ -13,7 +9,7 @@ export class GqlJwtGuard implements CanActivate {
 
   canActivate(context: ExecutionContext): boolean {
     const gql = GqlExecutionContext.create(context);
-    const { req } = gql.getContext<{ req: any }>();
+    const { req } = gql.getContext<GatewayGraphqlContext>();
     const auth = req.headers?.authorization as string | undefined;
     const token = auth?.replace(/^Bearer\s+/i, '');
     if (!token) throw new UnauthorizedException();
