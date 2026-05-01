@@ -12,31 +12,31 @@ kind: Kustomization
 namespace: shop
 
 resources:
-  - namespace.yaml
-  - secrets.yaml          # gitignored; create from secrets.example.yaml
-  - network-policies.yaml
-  - user-svc.yaml
-  - shop-svc.yaml
-  - order-svc.yaml
-  - api-gateway.yaml
-  - web.yaml
-  - ingress.yaml
+- namespace.yaml
+- secrets.yaml
+- network-policies.yaml
+- user-svc.yaml
+- shop-svc.yaml
+- order-svc.yaml
+- api-gateway.yaml
+- web.yaml
+- ingress.yaml
 
 # `name` here matches the `image:` field in the deployment YAMLs.
 # `newName` is the registry path; `newTag` is bumped by CI.
 images:
-  - name: docker.io/amir2575/shop-api-gateway
-    newName: docker.io/amir2575/shop-api-gateway
-    newTag: latest
-  - name: docker.io/amir2575/shop-web
-    newName: docker.io/amir2575/shop-web
-    newTag: latest
-  - name: docker.io/amir2575/shop-user-svc
-    newName: docker.io/amir2575/shop-user-svc
-    newTag: latest
-  - name: docker.io/amir2575/shop-shop-svc
-    newName: docker.io/amir2575/shop-shop-svc
-    newTag: latest
-  - name: docker.io/amir2575/shop-order-svc
-    newName: docker.io/amir2575/shop-order-svc
-    newTag: latest
+- name: docker.io/amir2575/shop-api-gateway
+  newName: docker.io/amir2575/shop-api-gateway
+  newTag: sha-c7fcf62
+- name: docker.io/amir2575/shop-order-svc
+  newName: docker.io/amir2575/shop-order-svc
+  newTag: sha-c7fcf62
+- name: docker.io/amir2575/shop-shop-svc
+  newName: docker.io/amir2575/shop-shop-svc
+  newTag: sha-c7fcf62
+- name: docker.io/amir2575/shop-user-svc
+  newName: docker.io/amir2575/shop-user-svc
+  newTag: sha-c7fcf62
+- name: docker.io/amir2575/shop-web
+  newName: docker.io/amir2575/shop-web
+  newTag: sha-c7fcf62
