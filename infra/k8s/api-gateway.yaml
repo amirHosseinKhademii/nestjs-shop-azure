@@ -1,0 +1,98 @@
+# The only backend exposed to the Ingress. Verifies JWTs and proxies GraphQL
+# requests to the internal services. JWT_SECRET comes from the shared Secret;
+# the gateway never talks to storage directly.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: shop
+  labels:
+    app: api-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api-gateway
+          # Image tag is overridden by Kustomize (see kustomization.yaml)
+          # and bumped by the `update-manifests` CI job to the immutable
+          # short-SHA tag pushed by `docker/build-push-action`.
+          image: docker.io/amir2575/shop-api-gateway:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: shop-app-secrets
+          env:
+            - name: PORT
+              value: '3000'
+            - name: NODE_ENV
+              value: production
+            - name: TRUST_PROXY
+              value: '1'
+            - name: USER_SVC_URL
+              value: http://user-svc:3001
+            - name: SHOP_SVC_URL
+              value: http://shop-svc:3002
+            - name: ORDER_SVC_URL
+              value: http://order-svc:3003
+            - name: OTEL_SERVICE_NAME
+              value: api-gateway
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: '1'
+              memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: shop
+spec:
+  type: ClusterIP
+  selector:
+    app: api-gateway
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http

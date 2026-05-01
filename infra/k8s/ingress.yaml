@@ -1,0 +1,65 @@
+# Public entrypoint for the cluster. Requires:
+#   - ingress-nginx controller (https://kubernetes.github.io/ingress-nginx/)
+#   - cert-manager + a ClusterIssuer named `letsencrypt` for TLS
+#     (or replace the `tls` block with a Secret you manage yourself)
+#
+# Routing:
+#   GET  /              → web        (static SPA, served by nginx-unprivileged)
+#   POST /graphql       → api-gateway (single GraphQL endpoint)
+#   GET  /healthz       → web        (cheap liveness path; not /health/* of svcs)
+#
+# Backend services (user-svc / shop-svc / order-svc) are NOT routed by this
+# Ingress and have ClusterIP-only Services, so they cannot be reached from the
+# public internet. NetworkPolicy enforces this end-to-end.
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: shop
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    # ── TLS / transport hardening ─────────────────────────────────────────
+    nginx.ingress.kubernetes.io/ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+    nginx.ingress.kubernetes.io/hsts: 'true'
+    nginx.ingress.kubernetes.io/hsts-max-age: '31536000'
+    nginx.ingress.kubernetes.io/hsts-include-subdomains: 'true'
+    nginx.ingress.kubernetes.io/hsts-preload: 'true'
+    # ── Body / timeout limits ─────────────────────────────────────────────
+    nginx.ingress.kubernetes.io/proxy-body-size: '1m'
+    nginx.ingress.kubernetes.io/proxy-read-timeout: '30'
+    nginx.ingress.kubernetes.io/proxy-send-timeout: '30'
+    # ── Rate limit GraphQL surface (per source IP) ────────────────────────
+    nginx.ingress.kubernetes.io/limit-rps: '20'
+    nginx.ingress.kubernetes.io/limit-connections: '20'
+    # NOTE: Security headers (X-Content-Type-Options, X-Frame-Options,
+    # Referrer-Policy, Permissions-Policy, COOP/CORP) are added at the source:
+    #   - /        → apps/web/nginx.conf  (add_header directives)
+    #   - /graphql → api-gateway via Helmet (apps/api-gateway/src/main.ts)
+    # That avoids the configuration-snippet annotation, which modern
+    # ingress-nginx releases reject by default (CVE-2021-25742 mitigation).
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - shop.example.com
+      secretName: shop-tls
+  rules:
+    - host: shop.example.com
+      http:
+        paths:
+          - path: /graphql
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 3000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80

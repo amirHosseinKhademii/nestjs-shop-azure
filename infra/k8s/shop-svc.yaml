@@ -1,0 +1,90 @@
+# Internal-only service. Reachable only from api-gateway. Storage is external
+# (MongoDB Atlas + Upstash Redis), connection strings come from the shared
+# Secret. Egress to order-svc on the in-cluster DNS for the HTTP checkout
+# fallback path.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: shop-svc
+  namespace: shop
+  labels:
+    app: shop-svc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: shop-svc
+  template:
+    metadata:
+      labels:
+        app: shop-svc
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: shop-svc
+          image: docker.io/amir2575/shop-shop-svc:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3002
+          envFrom:
+            - secretRef:
+                name: shop-app-secrets
+          env:
+            - name: PORT
+              value: '3002'
+            - name: NODE_ENV
+              value: production
+            - name: ORDER_SVC_URL
+              value: http://order-svc:3003
+            - name: CHECKOUT_TRANSPORT
+              value: http
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: '1'
+              memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: shop-svc
+  namespace: shop
+spec:
+  type: ClusterIP
+  selector:
+    app: shop-svc
+  ports:
+    - name: http
+      port: 3002
+      targetPort: http

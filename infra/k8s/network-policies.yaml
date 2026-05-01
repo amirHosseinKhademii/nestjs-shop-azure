@@ -1,0 +1,250 @@
+# Network isolation for the `shop` namespace.
+#
+# Requires a CNI that enforces NetworkPolicy. On managed AKS, create the cluster
+# with `--network-plugin azure --network-policy cilium` (or `calico`). Without
+# enforcement these manifests are inert.
+#
+# Trust model:
+#   Internet ─▶ Ingress (ingress-nginx) ─▶ web :8080
+#                                       ─▶ api-gateway :3000
+#   api-gateway ─▶ user-svc :3001
+#               ─▶ shop-svc :3002
+#               ─▶ order-svc :3003
+#   shop-svc ─▶ order-svc :3003   (HTTP checkout fallback)
+#   {user,shop,order}-svc ─▶ public internet (Neon / Atlas / Upstash / Service Bus)
+#
+# `web` is a static SPA; in production it never opens an outbound connection
+# (the SPA in the browser hits the Ingress directly for /graphql). The web pod
+# therefore has no egress allow-list besides DNS.
+#
+# Backends do not authenticate requests anymore — the JWT is verified once in
+# the gateway. The network is what guarantees only the gateway can reach them.
+#
+# PRE-REQUISITE: the `ingress-nginx` namespace must be labelled so its pods can
+# be selected:
+#
+#   kubectl label namespace ingress-nginx kubernetes.io/metadata.name=ingress-nginx --overwrite
+#
+# (The `kubernetes.io/metadata.name` label is set automatically on every
+# namespace since Kubernetes 1.22, so on a recent cluster this should already
+# be true.)
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: shop
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+  # No ingress / egress rules => deny everything by default. Allow rules below.
+
+---
+# Allow DNS lookups (kube-dns / coredns) for every pod in the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns-egress
+  namespace: shop
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+
+---
+# web: static SPA. Public traffic enters via the ingress controller only.
+# No egress: the pod just serves files; the SPA in the browser calls /graphql
+# through the Ingress, not from inside the cluster.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels:
+      app: web
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress: []
+
+---
+# api-gateway: ingress only from ingress-nginx, egress only to the three
+# internal services. The gateway never talks to storage.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-gateway
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels:
+      app: api-gateway
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: user-svc
+      ports:
+        - protocol: TCP
+          port: 3001
+    - to:
+        - podSelector:
+            matchLabels:
+              app: shop-svc
+      ports:
+        - protocol: TCP
+          port: 3002
+    - to:
+        - podSelector:
+            matchLabels:
+              app: order-svc
+      ports:
+        - protocol: TCP
+          port: 3003
+
+---
+# user-svc: ingress only from api-gateway, egress to Neon Postgres (TLS).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: user-svc
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels:
+      app: user-svc
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - protocol: TCP
+          port: 3001
+  egress:
+    # Neon Postgres (public internet, TLS).
+    - ports:
+        - protocol: TCP
+          port: 5432
+    # Generic HTTPS (e.g. Neon control plane / observability).
+    - ports:
+        - protocol: TCP
+          port: 443
+
+---
+# shop-svc: ingress only from api-gateway, egress to Atlas, Upstash, order-svc
+# (HTTP checkout fallback) and Service Bus (HTTPS, when enabled).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: shop-svc
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels:
+      app: shop-svc
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - protocol: TCP
+          port: 3002
+  egress:
+    # MongoDB Atlas (TLS).
+    - ports:
+        - protocol: TCP
+          port: 27017
+    # Upstash Redis (TLS).
+    - ports:
+        - protocol: TCP
+          port: 6379
+    # In-cluster: HTTP checkout fallback to order-svc.
+    - to:
+        - podSelector:
+            matchLabels:
+              app: order-svc
+      ports:
+        - protocol: TCP
+          port: 3003
+    # Azure Service Bus / Atlas SRV lookups / Upstash control plane (HTTPS).
+    - ports:
+        - protocol: TCP
+          port: 443
+
+---
+# order-svc: ingress from api-gateway (reads) AND shop-svc (HTTP checkout),
+# egress to Neon Postgres and Service Bus (HTTPS).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: order-svc
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels:
+      app: order-svc
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+        - podSelector:
+            matchLabels:
+              app: shop-svc
+      ports:
+        - protocol: TCP
+          port: 3003
+  egress:
+    # Neon Postgres (public internet, TLS).
+    - ports:
+        - protocol: TCP
+          port: 5432
+    # Azure Service Bus / Neon control plane (HTTPS).
+    - ports:
+        - protocol: TCP
+          port: 443

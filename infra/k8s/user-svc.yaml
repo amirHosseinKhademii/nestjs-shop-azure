@@ -1,0 +1,87 @@
+# Internal-only service. Accessed solely by api-gateway via the in-cluster
+# DNS name (see network-policies.yaml). Storage is external (Neon Postgres),
+# connection string injected from the `shop-app-secrets` Secret.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-svc
+  namespace: shop
+  labels:
+    app: user-svc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: user-svc
+  template:
+    metadata:
+      labels:
+        app: user-svc
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: user-svc
+          image: docker.io/amir2575/shop-user-svc:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3001
+          envFrom:
+            - secretRef:
+                name: shop-app-secrets
+          env:
+            - name: PORT
+              value: '3001'
+            - name: NODE_ENV
+              value: production
+            - name: TYPEORM_SYNC
+              value: 'false'
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: '1'
+              memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: user-svc
+  namespace: shop
+spec:
+  type: ClusterIP
+  selector:
+    app: user-svc
+  ports:
+    - name: http
+      port: 3001
+      targetPort: http
