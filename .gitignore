@@ -3,6 +3,8 @@ dist
 .env
 .env.example
 .env.*
+infra/k8s/secrets.yaml
+infra/k8s/secrets.yml
 coverage
 .turbo
 *.log

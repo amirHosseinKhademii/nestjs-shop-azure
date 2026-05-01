@@ -76,21 +76,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Setup & install
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Cache Turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
       - name: Prettier
         run: pnpm run format:check
 
-      - name: ESLint
-        run: pnpm run lint:services
-
-      - name: Typecheck
-        run: pnpm run typecheck:services
-
-      - name: Test
-        run: pnpm run test:services
+      - name: Lint, typecheck, test (turbo)
+        run: pnpm exec turbo run lint typecheck test --filter='./apps/*-svc' --filter=@shop/api-gateway
 
   build:
     name: Build (Nest)
@@ -100,11 +104,21 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
 
       - name: Setup & install
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build
+      - name: Cache Turbo
+        uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Build (turbo)
         run: pnpm run build:services
 
   docker:
