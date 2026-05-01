@@ -6,6 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "init:user-env": "sh scripts/init-user-env.sh",
     "build": "pnpm -r run build",
     "lint": "pnpm -r run lint",
     "test": "pnpm -r run test",

@@ -1,8 +1,8 @@
 node_modules
 dist
 .env
+.env.example
 .env.*
-!.env.example
 coverage
 .turbo
 *.log
@@ -11,6 +11,7 @@ coverage
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+terraform.tfvars
 
 # First-commit scope: only apps/user-svc is tracked; opt in other paths later.
 apps/api-gateway/
