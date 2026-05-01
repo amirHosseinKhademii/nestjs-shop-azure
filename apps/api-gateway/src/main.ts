@@ -8,15 +8,18 @@ import { correlationIdMiddleware } from './middleware/correlation-id.middleware'
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  const isProd = process.env.NODE_ENV === 'production';
+  const logLevels = isProd
+    ? (['error', 'warn', 'log'] as const)
+    : (['error', 'warn', 'log', 'debug', 'verbose'] as const);
   try {
+    // Don't buffer logs: if NestFactory.create() throws (e.g. a module
+    // initialisation error) buffered logs are silently lost and the pod
+    // appears to exit with no output at all. Pay the few extra log lines
+    // for the boot sequence to keep diagnostics intact.
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-      bufferLogs: true,
+      logger: [...logLevels],
     });
-    const isProd = process.env.NODE_ENV === 'production';
-    const logLevels = isProd
-      ? (['error', 'warn', 'log'] as const)
-      : (['error', 'warn', 'log', 'debug', 'verbose'] as const);
-    app.useLogger([...logLevels]);
 
     const trustProxy = process.env.TRUST_PROXY !== '0';
     app.set('trust proxy', trustProxy ? 1 : false);
