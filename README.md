@@ -1,6 +1,6 @@
 # shop-nest-azure
 
-[![CI — user-svc, api-gateway & shop-svc](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci-user-api-gateway.yml/badge.svg?branch=main)](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci-user-api-gateway.yml)
+[![CI-CD](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci-user-api-gateway.yml/badge.svg?branch=main)](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci-user-api-gateway.yml)
 [![workflow runs](https://img.shields.io/badge/Actions-all%20runs-2088FF?logo=github)](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions)
 
 The badges above show **main-branch CI** on the repo home page (README). GitHub does not place the Actions pipeline on the overview by default—this is the usual way to surface it.

@@ -5,67 +5,29 @@ on:
     branches: [ main ]
     tags: [ 'v*.*.*' ]
     paths:
-      - "apps/user-svc/**"
-      - "apps/api-gateway/**"
-      - "apps/shop-svc/**"
-      - "apps/order-svc/**"
-      - "packages/shared/**"
+      - "apps/**"
+      - "packages/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "turbo.json"
-      - ".github/workflows/ci-cd.yml"
-      - ".github/actions/**"
       - ".prettierrc"
       - ".prettierignore"
-      - "apps/user-svc/eslint.config.mjs"
-      - "apps/user-svc/jest.config.cjs"
-      - "apps/user-svc/tsconfig.build.json"
-      - "apps/api-gateway/eslint.config.mjs"
-      - "apps/api-gateway/jest.config.cjs"
-      - "apps/api-gateway/tsconfig.build.json"
-      - "apps/shop-svc/eslint.config.mjs"
-      - "apps/shop-svc/jest.config.cjs"
-      - "apps/shop-svc/tsconfig.build.json"
-      - "apps/order-svc/eslint.config.mjs"
-      - "apps/order-svc/jest.config.cjs"
-      - "apps/order-svc/tsconfig.build.json"
-      - "apps/user-svc/Dockerfile"
-      - "apps/api-gateway/Dockerfile"
-      - "apps/shop-svc/Dockerfile"
-      - "apps/order-svc/Dockerfile"
+      - ".github/workflows/ci-cd.yml"
+      - ".github/actions/**"
   pull_request:
     branches: [ main ]
     paths:
-      - "apps/user-svc/**"
-      - "apps/api-gateway/**"
-      - "apps/shop-svc/**"
-      - "apps/order-svc/**"
-      - "packages/shared/**"
+      - "apps/**"
+      - "packages/**"
       - "package.json"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
       - "turbo.json"
-      - ".github/workflows/ci-cd.yml"
-      - ".github/actions/**"
       - ".prettierrc"
       - ".prettierignore"
-      - "apps/user-svc/eslint.config.mjs"
-      - "apps/user-svc/jest.config.cjs"
-      - "apps/user-svc/tsconfig.build.json"
-      - "apps/api-gateway/eslint.config.mjs"
-      - "apps/api-gateway/jest.config.cjs"
-      - "apps/api-gateway/tsconfig.build.json"
-      - "apps/shop-svc/eslint.config.mjs"
-      - "apps/shop-svc/jest.config.cjs"
-      - "apps/shop-svc/tsconfig.build.json"
-      - "apps/order-svc/eslint.config.mjs"
-      - "apps/order-svc/jest.config.cjs"
-      - "apps/order-svc/tsconfig.build.json"
-      - "apps/user-svc/Dockerfile"
-      - "apps/api-gateway/Dockerfile"
-      - "apps/shop-svc/Dockerfile"
-      - "apps/order-svc/Dockerfile"
+      - ".github/workflows/ci-cd.yml"
+      - ".github/actions/**"
 
 concurrency:
   group: ci-user-gateway-${{ github.workflow }}-${{ github.ref }}
@@ -94,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc]
+        service: [api-gateway, user-svc, shop-svc, order-svc, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -123,7 +85,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc]
+        service: [api-gateway, user-svc, shop-svc, order-svc, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -154,7 +116,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc]
+        service: [api-gateway, user-svc, shop-svc, order-svc, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v6

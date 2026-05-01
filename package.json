@@ -18,8 +18,8 @@
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",
-    "format": "prettier --write \"apps/*/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.ts\"",
-    "format:check": "prettier --check \"apps/*/src/**/*.{ts,tsx}\" \"packages/*/src/**/*.ts\"",
+    "format": "prettier --write \"apps/*/src/**/*.{ts,tsx,css}\" \"packages/*/src/**/*.ts\"",
+    "format:check": "prettier --check \"apps/*/src/**/*.{ts,tsx,css}\" \"packages/*/src/**/*.ts\"",
     "verify": "pnpm run format:check && turbo run lint typecheck test",
     "check": "pnpm run verify && turbo run build",
     "ci": "pnpm run check",
@@ -36,7 +36,9 @@
     "dev:shop": "pnpm --filter @shop/shop-svc start:dev",
     "dev:order": "pnpm --filter @shop/order-svc start:dev",
     "dev:web": "pnpm --filter @shop/web dev",
-    "dev:services": "turbo run start:dev --filter='./apps/*-svc' --filter=@shop/api-gateway --parallel",
+    "dev:services": "turbo run start:dev --filter='./apps/*-svc' --filter=@shop/api-gateway",
+    "dev": "turbo run start:dev dev --filter='./apps/*'",
+    "dev:all": "turbo run start:dev dev --filter='./apps/*'",
     "audit": "pnpm audit --audit-level=moderate"
   },
   "devDependencies": {
