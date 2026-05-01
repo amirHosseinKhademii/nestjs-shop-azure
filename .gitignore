@@ -1,0 +1,24 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+coverage
+.turbo
+*.log
+.DS_Store
+.terraform
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# First-commit scope: only apps/user-svc is tracked; opt in other paths later.
+apps/api-gateway/
+apps/order-svc/
+apps/shop-svc/
+apps/web/
+packages/
+infra/
+.github/
+azure-pipelines.yml
+docker-compose.yml

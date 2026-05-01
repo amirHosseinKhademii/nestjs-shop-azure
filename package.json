@@ -1,0 +1,18 @@
+{
+  "name": "shop-nest-azure",
+  "private": true,
+  "packageManager": "pnpm@9.14.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "test": "pnpm -r run test",
+    "dev:gateway": "pnpm --filter @shop/api-gateway start:dev",
+    "dev:user": "pnpm --filter @shop/user-svc start:dev",
+    "dev:shop": "pnpm --filter @shop/shop-svc start:dev",
+    "dev:order": "pnpm --filter @shop/order-svc start:dev",
+    "dev:web": "pnpm --filter @shop/web dev"
+  }
+}
