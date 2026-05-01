@@ -10,4 +10,5 @@ RUN pnpm install \
  && pnpm prune --prod
 WORKDIR /workspace/apps/user-svc
 EXPOSE 3001
+USER node
 CMD ["node", "dist/main.js"]

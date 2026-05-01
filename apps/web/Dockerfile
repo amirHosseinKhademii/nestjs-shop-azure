@@ -7,8 +7,11 @@ COPY packages ./packages
 RUN pnpm install --frozen-lockfile \
  && pnpm exec turbo run build --filter=@shop/web
 
-FROM nginx:1.27-alpine
+# Non-root nginx (UID 101). Listens on 8080 by default — see nginx.conf.
+FROM nginxinc/nginx-unprivileged:1.27-alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /workspace/apps/web/dist /usr/share/nginx/html
-EXPOSE 80
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s CMD wget -q -O - http://localhost/ >/dev/null || exit 1
+COPY --from=build --chown=101:101 /workspace/apps/web/dist /usr/share/nginx/html
+USER 101
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
+  CMD wget -q -O - http://localhost:8080/ >/dev/null || exit 1

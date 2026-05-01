@@ -17,7 +17,7 @@ terraform.tfvars
 
 # First-commit scope: only apps/user-svc is tracked; opt in other paths later.
 
-
+k8s-local/
 
 infra/
 azure-pipelines.yml
