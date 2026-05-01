@@ -133,11 +133,25 @@ aws iam create-role \
   --role-name github-actions-shop-cd \
   --assume-role-policy-document file:///tmp/trust.json
 
-# 5c. The role only needs to describe the EKS cluster — RBAC inside the
+# 5c. The role only needs to describe the EKS cluster (so `aws eks
+# update-kubeconfig` can fetch the endpoint + CA cert) — RBAC inside the
 # cluster controls everything else.
-aws iam attach-role-policy \
+#
+# NOTE: there is no AWS-managed policy that grants `eks:DescribeCluster`
+# to a *caller*. The `AmazonEKSClusterPolicy` managed policy is for the
+# EKS service role, not for users — attaching it here does nothing.
+# Use this inline policy instead.
+aws iam put-role-policy \
   --role-name github-actions-shop-cd \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+  --policy-name eks-describe-cluster \
+  --policy-document '{
+    "Version": "2012-10-17",
+    "Statement": [{
+      "Effect": "Allow",
+      "Action": ["eks:DescribeCluster", "eks:ListClusters"],
+      "Resource": "*"
+    }]
+  }'
 
 # 5d. Map the IAM role to a Kubernetes group.
 eksctl create iamidentitymapping \
@@ -232,9 +246,9 @@ eksctl delete cluster --name shop-demo --region eu-west-1 --wait
 
 # 3. Optional — remove the CI/CD IAM role + OIDC provider if you're done
 # with the demo entirely.
-aws iam detach-role-policy \
+aws iam delete-role-policy \
   --role-name github-actions-shop-cd \
-  --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+  --policy-name eks-describe-cluster
 aws iam delete-role --role-name github-actions-shop-cd
 # (leave the OIDC provider in place — it's reusable across repos and free)
 

@@ -1,8 +1,21 @@
-# CI: format → verify → build (per service, in parallel via matrix).
+# ─────────────────────────────────────────────────────────────────────────────
+#  CI — format → verify → build (per service in parallel)
 #
-# Runs on every push and PR. Does NOT push images or touch the cluster — that
-# is the CD workflow's job, which runs only after CI passes on `main` or a
-# `v*.*.*` release tag (see .github/workflows/cd.yml).
+#  Runs on every push to `main` / `v*.*.*` tags and every PR. Does NOT push
+#  images or touch any cluster — that's the CD workflow
+#  (.github/workflows/cd.yml), which runs only after a green CI on `main`.
+#
+#  Best-practice notes for anyone editing this file:
+#    • Pinned runner (`ubuntu-24.04`, not `-latest`) for reproducibility.
+#    • Workflow-level `permissions: contents: read` — least privilege.
+#    • `concurrency.cancel-in-progress: true` cancels stale runs on the same
+#      ref to keep the queue moving on PR pushes.
+#    • Per-service matrix gives one row per service in the Actions UI so a
+#      failed `verify · web` is visually obvious without opening logs.
+#    • `ci-summary` rollup job exposes a single status check ("CI summary")
+#      that branch protection rules can require, instead of having to enumerate
+#      every matrix cell.
+# ─────────────────────────────────────────────────────────────────────────────
 name: CI
 
 on:
@@ -10,55 +23,73 @@ on:
     branches: [main]
     tags: ['v*.*.*']
     paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - ".prettierrc"
-      - ".prettierignore"
-      - ".github/workflows/ci.yml"
-      - ".github/workflows/cd.yml"
-      - ".github/actions/**"
+      - 'apps/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.prettierrc'
+      - '.prettierignore'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/cd.yml'
+      - '.github/actions/**'
   pull_request:
     branches: [main]
     paths:
-      - "apps/**"
-      - "packages/**"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - "turbo.json"
-      - ".prettierrc"
-      - ".prettierignore"
-      - ".github/workflows/ci.yml"
-      - ".github/workflows/cd.yml"
-      - ".github/actions/**"
+      - 'apps/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'turbo.json'
+      - '.prettierrc'
+      - '.prettierignore'
+      - '.github/workflows/ci.yml'
+      - '.github/workflows/cd.yml'
+      - '.github/actions/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  SERVICES: '["api-gateway","user-svc","shop-svc","order-svc","web"]'
+
 jobs:
+  # ─── Stage 1 ─ Workspace-level format check ───────────────────────────────
   format:
-    name: Prettier (workspace)
-    runs-on: ubuntu-latest
+    name: Format · prettier
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup & install
+      - name: Setup Node 24 + pnpm + install
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Prettier
+      - name: pnpm run format:check
         run: pnpm run format:check
 
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Format"
+            echo ""
+            echo "Workspace-wide \`prettier --check\` completed with status **${{ job.status }}**."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ─── Stage 2 ─ Per-service lint + typecheck + test ────────────────────────
   verify:
-    name: Verify (${{ matrix.service }})
+    name: Verify · ${{ matrix.service }}
     needs: format
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -70,10 +101,10 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Setup & install
+      - name: Setup Node 24 + pnpm + install
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Cache Turbo
+      - name: Restore Turbo cache
         uses: actions/cache@v5
         with:
           path: .turbo
@@ -81,13 +112,23 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-${{ matrix.service }}-
 
-      - name: Lint, typecheck, test
+      - name: Lint + typecheck + test (turbo)
         run: pnpm exec turbo run lint typecheck test --filter=@shop/${{ matrix.service }}
 
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Verify · \`${{ matrix.service }}\`"
+            echo ""
+            echo "lint + typecheck + test → **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ─── Stage 3 ─ Per-service build (TS / Vite output, no Docker) ────────────
   build:
-    name: Build (${{ matrix.service }})
+    name: Build · ${{ matrix.service }}
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
       fail-fast: false
@@ -99,10 +140,10 @@ jobs:
         with:
           fetch-depth: 2
 
-      - name: Setup & install
+      - name: Setup Node 24 + pnpm + install
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Cache Turbo
+      - name: Restore Turbo cache
         uses: actions/cache@v5
         with:
           path: .turbo
@@ -110,5 +151,43 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-${{ matrix.service }}-
 
-      - name: Build
+      - name: Build (turbo)
         run: pnpm exec turbo run build --filter=@shop/${{ matrix.service }}
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Build · \`${{ matrix.service }}\`"
+            echo ""
+            echo "turbo build → **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ─── Rollup ─ Single required check for branch protection ─────────────────
+  ci-summary:
+    name: CI summary
+    needs: [format, verify, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Aggregate
+        run: |
+          set -euo pipefail
+          F='${{ needs.format.result }}'
+          V='${{ needs.verify.result }}'
+          B='${{ needs.build.result }}'
+          {
+            echo "# CI rollup"
+            echo ""
+            echo "| Stage | Result |"
+            echo "| --- | --- |"
+            echo "| Format            | $F |"
+            echo "| Verify (matrix×5) | $V |"
+            echo "| Build  (matrix×5) | $B |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$F" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ]; then
+            echo "::error::At least one CI stage was not successful (format=$F verify=$V build=$B)"
+            exit 1
+          fi
+          echo "::notice::All CI stages passed."

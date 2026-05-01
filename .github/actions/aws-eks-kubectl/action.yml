@@ -1,0 +1,43 @@
+name: Configure AWS + kubectl for EKS
+description: >
+  OIDC-based AWS login (no long-lived keys), then point kubectl at the
+  configured EKS cluster and verify access by listing nodes. Used by every
+  CD job that needs to talk to the cluster.
+
+inputs:
+  aws-role:
+    required: true
+    description: IAM role ARN to assume via GitHub OIDC.
+  aws-region:
+    required: true
+    description: AWS region of the EKS cluster (e.g. eu-west-1).
+  eks-cluster:
+    required: true
+    description: EKS cluster name (e.g. shop-demo).
+
+outputs:
+  cluster-context:
+    description: kubectl current-context after configuration (handy for logs).
+    value: ${{ steps.kube.outputs.context }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure AWS credentials (OIDC)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.aws-role }}
+        aws-region: ${{ inputs.aws-region }}
+
+    - name: Update kubeconfig + verify cluster access
+      id: kube
+      shell: bash
+      run: |
+        set -euo pipefail
+        aws eks update-kubeconfig \
+          --name "${{ inputs.eks-cluster }}" \
+          --region "${{ inputs.aws-region }}"
+        CTX=$(kubectl config current-context)
+        echo "context=$CTX" >> "$GITHUB_OUTPUT"
+        kubectl version --client=true
+        kubectl get nodes -o wide
