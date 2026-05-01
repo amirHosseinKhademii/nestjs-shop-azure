@@ -41,8 +41,11 @@ Checkout uses **`CHECKOUT_TRANSPORT=http`** in Compose so **shop-svc** POSTs to 
 | `apps/user-svc` | Auth + users (Postgres / TypeORM) |
 | `apps/shop-svc` | Products (Mongo), cart (Redis), checkout publisher |
 | `apps/order-svc` | Orders (Postgres), Service Bus consumer |
-| `infra/terraform` | Azure resources |
-| `infra/k8s` | Kubernetes manifests |
+| `infra/k8s` | Production Kubernetes manifests (cert-manager + real DNS) — see [`infra/k8s/README.md`](infra/k8s/README.md) |
+| `infra/aws/eks-overlay` | One-shot EKS demo deploy — see [`infra/aws/eks-overlay/Readme.md`](infra/aws/eks-overlay/Readme.md) |
+| `infra/azure/aks-overlay` | One-shot AKS demo deploy — see [`infra/azure/aks-overlay/Readme.md`](infra/azure/aks-overlay/Readme.md) |
+| `k8s-local` | Local Minikube manifests (`imagePullPolicy: Never`) — see [`k8s-local/README.md`](k8s-local/README.md) |
+| `infra/terraform` | Azure resources (legacy) |
 
 ## CI / CD
 
@@ -87,8 +90,11 @@ Stages (per service, in parallel):
    - `latest` — only on `main`.
 2. **Update manifests** — `kustomize edit set image` against the
    `images:` block of [`infra/k8s/kustomization.yaml`](infra/k8s/kustomization.yaml),
-   committed back to `main` with `[skip ci]` so ArgoCD / Flux (or a manual
-   `kubectl apply -k`) picks up the new tag.
+   committed back to `main` with `[skip ci]`.
+3. **Seed secrets** — `kubectl apply` `shop-app-secrets` from CI-side
+   secret variables (idempotent). Skipped when no cluster is configured.
+4. **Deploy** — `kubectl apply -k <overlay>` against the target cluster
+   and wait for rollout. Skipped when no cluster is configured.
 
 ### Required secrets / variables
 
@@ -97,6 +103,9 @@ Stages (per service, in parallel):
 | Docker Hub credentials | `secrets.DOCKERHUB_USERNAME`, `secrets.DOCKERHUB_TOKEN` | Service Connection: `$(DOCKER_REGISTRY_CONNECTION)` |
 | Image namespace        | `vars.DOCKERHUB_NAMESPACE` (or fall back to `secrets.DOCKERHUB_USERNAME`) | Pipeline variable: `DOCKERHUB_NAMESPACE` |
 | Manifest commit-back   | Repo setting → Workflow permissions → **Read and write** | Project Settings → Repos → Build Service → **Contribute = Allow**. Pipeline vars `GIT_USER_NAME` / `GIT_USER_EMAIL` |
+| EKS deploy             | `vars.EKS_CLUSTER_NAME`, `vars.AWS_REGION`, `secrets.AWS_ROLE_TO_ASSUME` — see [`infra/aws/eks-overlay/Readme.md`](infra/aws/eks-overlay/Readme.md) | n/a |
+| AKS deploy             | n/a (mirror the EKS jobs swapping `azure/login@v2` — see notes) | `AZURE_SUBSCRIPTION` (Service Connection name), `AKS_CLUSTER_NAME`, `AKS_RESOURCE_GROUP` — see [`infra/azure/aks-overlay/Readme.md`](infra/azure/aks-overlay/Readme.md) |
+| App secrets (both)     | `secrets.DATABASE_URL`, `secrets.MONGO_URI`, `secrets.REDIS_URL`, `secrets.JWT_SECRET` | Same names as **secret** pipeline variables |
 
 ## Observability
 

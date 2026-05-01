@@ -174,3 +174,145 @@ stages:
             displayName: Commit & push
             env:
               SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+
+  # Pushes `shop-app-secrets` into AKS from the corresponding pipeline
+  # secret variables. Mirrors `seed-secrets` in .github/workflows/cd.yml.
+  #
+  # Required pipeline variables (Library / pipeline UI):
+  #   • AZURE_SUBSCRIPTION    (name of an "Azure Resource Manager"
+  #                            service connection — workload identity
+  #                            federation preferred)
+  #   • AKS_CLUSTER_NAME      (e.g. shop-demo)
+  #   • AKS_RESOURCE_GROUP    (e.g. shop-demo-rg)
+  #   • DATABASE_URL          (marked SECRET)
+  #   • MONGO_URI             (marked SECRET)
+  #   • REDIS_URL             (marked SECRET)
+  #   • JWT_SECRET            (marked SECRET)
+  #
+  # The whole stage is skipped when AKS_CLUSTER_NAME isn't set, so the
+  # pipeline stays green for image-only consumers. See
+  # infra/azure/aks-overlay/Readme.md for the full bootstrap.
+  - stage: SeedSecrets
+    displayName: Seed cluster secrets
+    dependsOn: UpdateManifests
+    condition: and(succeeded(), ne(variables['AKS_CLUSTER_NAME'], ''))
+    jobs:
+      - job: Seed
+        timeoutInMinutes: 10
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            fetchDepth: 1
+
+          - script: |
+              set -e
+              missing=()
+              for v in DATABASE_URL MONGO_URI REDIS_URL JWT_SECRET AKS_RESOURCE_GROUP; do
+                if [ -z "${!v}" ]; then
+                  missing+=("$v")
+                fi
+              done
+              if [ ${#missing[@]} -ne 0 ]; then
+                echo "##vso[task.logissue type=error]Missing required pipeline variables: ${missing[*]}"
+                exit 1
+              fi
+              echo "All required pipeline variables present."
+            displayName: Validate required pipeline variables
+            env:
+              # Pipe secrets in via env so they're not echoed in -x logs.
+              DATABASE_URL: $(DATABASE_URL)
+              MONGO_URI: $(MONGO_URI)
+              REDIS_URL: $(REDIS_URL)
+              JWT_SECRET: $(JWT_SECRET)
+              AKS_RESOURCE_GROUP: $(AKS_RESOURCE_GROUP)
+
+          - task: AzureCLI@2
+            displayName: az aks get-credentials + seed Secret
+            inputs:
+              azureSubscription: $(AZURE_SUBSCRIPTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              # `az aks install-cli` is a no-op if kubectl is already
+              # there (it is on Microsoft-hosted ubuntu-latest images).
+              inlineScript: |
+                set -e
+                az aks install-cli --only-show-errors >/dev/null 2>&1 || true
+                az aks get-credentials \
+                  --resource-group "$(AKS_RESOURCE_GROUP)" \
+                  --name "$(AKS_CLUSTER_NAME)" \
+                  --overwrite-existing
+                kubectl get nodes
+                kubectl apply -f infra/k8s/namespace.yaml
+                kubectl create secret generic shop-app-secrets \
+                  --namespace shop \
+                  --from-literal=DATABASE_URL="$DATABASE_URL" \
+                  --from-literal=MONGO_URI="$MONGO_URI" \
+                  --from-literal=REDIS_URL="$REDIS_URL" \
+                  --from-literal=JWT_SECRET="$JWT_SECRET" \
+                  --dry-run=client -o yaml | kubectl apply -f -
+                echo "── secret confirmed ──"
+                kubectl -n shop get secret shop-app-secrets \
+                  -o jsonpath='{.metadata.name}: {.metadata.creationTimestamp}'; echo
+            env:
+              DATABASE_URL: $(DATABASE_URL)
+              MONGO_URI: $(MONGO_URI)
+              REDIS_URL: $(REDIS_URL)
+              JWT_SECRET: $(JWT_SECRET)
+
+  # Final stage: actually deploy. Picks up the bumped tags from the
+  # UpdateManifests stage (re-checking out main) and applies the AKS
+  # demo overlay. Mirrors `deploy-eks` in .github/workflows/cd.yml.
+  - stage: Deploy
+    displayName: Deploy to AKS
+    dependsOn:
+      - UpdateManifests
+      - SeedSecrets
+    condition: and(succeeded(), ne(variables['AKS_CLUSTER_NAME'], ''))
+    jobs:
+      - job: Apply
+        timeoutInMinutes: 15
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            fetchDepth: 1
+            clean: true
+
+          - script: |
+              set -e
+              git fetch origin main
+              git checkout origin/main
+            displayName: Check out main (post-bump, with new image tags)
+
+          - task: AzureCLI@2
+            displayName: kubectl apply -k infra/azure/aks-overlay/
+            inputs:
+              azureSubscription: $(AZURE_SUBSCRIPTION)
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                set -e
+                az aks install-cli --only-show-errors >/dev/null 2>&1 || true
+                az aks get-credentials \
+                  --resource-group "$(AKS_RESOURCE_GROUP)" \
+                  --name "$(AKS_CLUSTER_NAME)" \
+                  --overwrite-existing
+
+                # `kubectl apply -k` uses kubectl's built-in kustomize.
+                kubectl apply -k infra/azure/aks-overlay/
+
+                for d in api-gateway web user-svc shop-svc order-svc; do
+                  echo "── rollout: $d ──"
+                  kubectl -n shop rollout status "deployment/$d" --timeout=5m
+                done
+
+                IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+                  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+                if [ -z "$IP" ]; then
+                  echo "##vso[task.logissue type=warning]ingress-nginx LB has no public IP yet (still provisioning?)."
+                  kubectl -n ingress-nginx get svc ingress-nginx-controller
+                  exit 0
+                fi
+                echo "App is live at: http://$IP"
+                echo "##vso[task.setvariable variable=APP_URL;isOutput=true]http://$IP"

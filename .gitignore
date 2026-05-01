@@ -3,8 +3,11 @@ dist
 .env
 .env.example
 .env.*
+# Real Secret manifests must never be committed. The .example file is the
+# tracked template; CI seeds the actual Secret from GitHub Repository Secrets.
 infra/k8s/secrets.yaml
 infra/k8s/secrets.yml
+infra/k8s/secrets.local.yaml
 coverage
 .turbo
 *.log
