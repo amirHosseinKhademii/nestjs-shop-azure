@@ -33,14 +33,14 @@ name: CD
 
 on:
   workflow_run:
-    workflows: [CI]
-    types: [completed]
+    workflows: [ CI ]
+    types: [ completed ]
   workflow_dispatch:
     inputs:
       reason:
-        description: 'Why are you running CD manually? (shows up in the summary)'
+        description: "Why are you running CD manually? (shows up in the summary)"
         required: false
-        default: 'manual deploy'
+        default: "manual deploy"
 
 permissions:
   contents: read
@@ -131,11 +131,11 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
-      packages: write     # future-proof for GHCR push
+      packages: write # future-proof for GHCR push
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+        service: [ api-gateway, user-svc, shop-svc, order-svc, web ]
     env:
       IMAGE: ${{ needs.prepare.outputs.namespace }}/shop-${{ matrix.service }}
     steps:
@@ -202,11 +202,11 @@ jobs:
   # ─── 2. Bump kustomization image tags + commit back to main ──────────────
   update-manifests:
     name: Bump k8s image tags
-    needs: [prepare, docker]
+    needs: [ prepare, docker ]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      contents: write     # to push the bump commit back to main
+      contents: write # to push the bump commit back to main
     outputs:
       bumped_sha: ${{ steps.commit.outputs.bump_sha }}
       skipped: ${{ steps.commit.outputs.skipped }}
@@ -221,7 +221,7 @@ jobs:
       - name: Install kustomize
         uses: imranismail/setup-kustomize@v2
         with:
-          kustomize-version: '5.4.3'
+          kustomize-version: "5.4.3"
 
       - name: Bump image tags in infra/k8s/kustomization.yaml
         working-directory: infra/k8s
@@ -274,12 +274,12 @@ jobs:
   # ─── 3. Seed shop-app-secrets in the cluster from GH Secrets ─────────────
   seed-secrets:
     name: Seed cluster secrets
-    needs: [prepare, update-manifests]
+    needs: [ prepare, update-manifests ]
     if: needs.prepare.outputs.eks_enabled == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      id-token: write     # OIDC -> AWS IAM role assumption
+      id-token: write # OIDC -> AWS IAM role assumption
       contents: read
     steps:
       - name: Checkout main
@@ -353,79 +353,78 @@ jobs:
           else
             echo "## seed-secrets → **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
           fi
-
   # ─── 4. Apply the EKS overlay + wait for rollout ─────────────────────────
-  deploy:
-    name: Deploy to EKS
-    needs: [prepare, update-manifests, seed-secrets]
-    if: needs.prepare.outputs.eks_enabled == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    permissions:
-      id-token: write
-      contents: read
-    environment:
-      name: production-eks
-      url: ${{ steps.url.outputs.app_url }}
-    steps:
-      # If update-manifests committed a bump, deploy that exact SHA so we
-      # never race a concurrent push. Falls back to the original CI SHA
-      # when there was nothing to bump (re-run with no code change).
-      - name: Checkout deploy ref
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ needs.update-manifests.outputs.bumped_sha || needs.prepare.outputs.sha }}
-          fetch-depth: 1
+  # deploy:
+  #   name: Deploy to EKS
+  #   needs: [prepare, update-manifests, seed-secrets]
+  #   if: needs.prepare.outputs.eks_enabled == 'true'
+  #   runs-on: ubuntu-24.04
+  #   timeout-minutes: 15
+  #   permissions:
+  #     id-token: write
+  #     contents: read
+  #   environment:
+  #     name: production-eks
+  #     url: ${{ steps.url.outputs.app_url }}
+  #   steps:
+  #     # If update-manifests committed a bump, deploy that exact SHA so we
+  #     # never race a concurrent push. Falls back to the original CI SHA
+  #     # when there was nothing to bump (re-run with no code change).
+  #     - name: Checkout deploy ref
+  #       uses: actions/checkout@v6
+  #       with:
+  #         ref: ${{ needs.update-manifests.outputs.bumped_sha || needs.prepare.outputs.sha }}
+  #         fetch-depth: 1
 
-      - name: Configure AWS + kubectl
-        uses: ./.github/actions/aws-eks-kubectl
-        with:
-          aws-role: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-          aws-region: ${{ vars.AWS_REGION }}
-          eks-cluster: ${{ vars.EKS_CLUSTER_NAME }}
+  #     - name: Configure AWS + kubectl
+  #       uses: ./.github/actions/aws-eks-kubectl
+  #       with:
+  #         aws-role: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+  #         aws-region: ${{ vars.AWS_REGION }}
+  #         eks-cluster: ${{ vars.EKS_CLUSTER_NAME }}
 
-      - name: Apply EKS overlay (kubectl built-in kustomize)
-        run: |
-          set -euo pipefail
-          kubectl apply -k infra/aws/eks-overlay/
+  #     - name: Apply EKS overlay (kubectl built-in kustomize)
+  #       run: |
+  #         set -euo pipefail
+  #         kubectl apply -k infra/aws/eks-overlay/
 
-      - name: Wait for rollout (5m per deployment)
-        id: rollout
-        run: |
-          set -euo pipefail
-          {
-            echo "## Rollout"
-            echo ""
-            echo "| Deployment | Result |"
-            echo "| --- | --- |"
-          } >> "$GITHUB_STEP_SUMMARY"
-          fail=0
-          for d in api-gateway web user-svc shop-svc order-svc; do
-            echo "── rollout: $d ──"
-            if kubectl -n shop rollout status "deployment/$d" --timeout=5m; then
-              echo "| \`$d\` | OK |" >> "$GITHUB_STEP_SUMMARY"
-            else
-              echo "| \`$d\` | **FAILED** |" >> "$GITHUB_STEP_SUMMARY"
-              fail=1
-            fi
-          done
-          exit "$fail"
+  #     - name: Wait for rollout (5m per deployment)
+  #       id: rollout
+  #       run: |
+  #         set -euo pipefail
+  #         {
+  #           echo "## Rollout"
+  #           echo ""
+  #           echo "| Deployment | Result |"
+  #           echo "| --- | --- |"
+  #         } >> "$GITHUB_STEP_SUMMARY"
+  #         fail=0
+  #         for d in api-gateway web user-svc shop-svc order-svc; do
+  #           echo "── rollout: $d ──"
+  #           if kubectl -n shop rollout status "deployment/$d" --timeout=5m; then
+  #             echo "| \`$d\` | OK |" >> "$GITHUB_STEP_SUMMARY"
+  #           else
+  #             echo "| \`$d\` | **FAILED** |" >> "$GITHUB_STEP_SUMMARY"
+  #             fail=1
+  #           fi
+  #         done
+  #         exit "$fail"
 
-      - name: Resolve public URL
-        id: url
-        run: |
-          set -euo pipefail
-          HOST=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
-                   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          if [ -z "$HOST" ]; then
-            echo "::warning::ingress-nginx ELB has no hostname yet (still provisioning?)"
-            kubectl -n ingress-nginx get svc ingress-nginx-controller
-            exit 0
-          fi
-          URL="http://$HOST"
-          echo "app_url=$URL" >> "$GITHUB_OUTPUT"
-          {
-            echo "## Live URL"
-            echo ""
-            echo "[$URL]($URL)"
-          } >> "$GITHUB_STEP_SUMMARY"
+  #     - name: Resolve public URL
+  #       id: url
+  #       run: |
+  #         set -euo pipefail
+  #         HOST=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+  #                  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+  #         if [ -z "$HOST" ]; then
+  #           echo "::warning::ingress-nginx ELB has no hostname yet (still provisioning?)"
+  #           kubectl -n ingress-nginx get svc ingress-nginx-controller
+  #           exit 0
+  #         fi
+  #         URL="http://$HOST"
+  #         echo "app_url=$URL" >> "$GITHUB_OUTPUT"
+  #         {
+  #           echo "## Live URL"
+  #           echo ""
+  #           echo "[$URL]($URL)"
+  #         } >> "$GITHUB_STEP_SUMMARY"
