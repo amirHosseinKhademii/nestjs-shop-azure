@@ -41,7 +41,11 @@ const apiGatewayEnv = join(__dirname, '..', '.env');
       useFactory: (config: ConfigService) => {
         const isProd = config.get<string>('NODE_ENV') === 'production';
         return {
-          autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+          // In dev, drop the SDL next to the source so codegen / IDE tooling
+          // can pick it up. In prod the rootfs is read-only (k8s
+          // securityContext.readOnlyRootFilesystem), so write to /tmp which
+          // is mounted as an emptyDir. Apollo only needs this file at boot.
+          autoSchemaFile: isProd ? '/tmp/schema.gql' : join(process.cwd(), 'src/schema.gql'),
           sortSchema: true,
           debug: !isProd,
           playground: !isProd,
