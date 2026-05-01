@@ -1,5 +1,5 @@
 name: Setup Node + pnpm (Corepack) + install
-description: Node 24 + Corepack reads pnpm version from root package.json packageManager (no pnpm/action-setup).
+description: Node 24 + Corepack. setup-node pnpm cache is omitted because it requires pnpm before Corepack runs.
 
 runs:
   using: composite
@@ -8,12 +8,14 @@ runs:
       uses: actions/setup-node@v6
       with:
         node-version: '24'
-        cache: 'pnpm'
-        cache-dependency-path: pnpm-lock.yaml
 
-    - name: Enable Corepack (pnpm from packageManager)
+    - name: Enable pnpm via Corepack
       shell: bash
-      run: corepack enable
+      run: |
+        corepack enable
+        PNPM_VER=$(node -p "require('./package.json').packageManager.replace(/^pnpm@/,'')")
+        corepack prepare "pnpm@${PNPM_VER}" --activate
+        pnpm --version
 
     - name: Install
       shell: bash
