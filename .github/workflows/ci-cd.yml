@@ -72,39 +72,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  verify:
-    name: Pre build (format, lint, typecheck, test)
+  format:
+    name: Prettier (workspace)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 2
 
       - name: Setup & install
         uses: ./.github/actions/setup-pnpm-node
-
-      - name: Cache Turbo
-        uses: actions/cache@v5
-        with:
-          path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
-          restore-keys: |
-            turbo-${{ runner.os }}-
 
       - name: Prettier
         run: pnpm run format:check
 
-      - name: Lint, typecheck, test (turbo)
-        run: pnpm exec turbo run lint typecheck test --filter='./apps/*-svc'
-          --filter=@shop/api-gateway
-
-  build:
-    name: Build (Nest)
-    needs: verify
+  verify:
+    name: Verify (${{ matrix.service }})
+    needs: format
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-svc, shop-svc, order-svc]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -118,12 +108,41 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .turbo
-          key: turbo-${{ runner.os }}-${{ github.sha }}
+          key: turbo-${{ runner.os }}-${{ matrix.service }}-${{ github.sha }}
           restore-keys: |
-            turbo-${{ runner.os }}-
+            turbo-${{ runner.os }}-${{ matrix.service }}-
 
-      - name: Build (turbo)
-        run: pnpm run build:services
+      - name: Lint, typecheck, test
+        run: pnpm exec turbo run lint typecheck test --filter=@shop/${{ matrix.service }}
+
+  build:
+    name: Build (${{ matrix.service }})
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-svc, shop-svc, order-svc]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Setup & install
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache Turbo
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ matrix.service }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ matrix.service }}-
+
+      - name: Build
+        run: pnpm exec turbo run build --filter=@shop/${{ matrix.service }}
 
   docker:
     name: Build & push image (${{ matrix.service }})
