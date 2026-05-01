@@ -1,46 +1,39 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  CD — prepare → docker → update-manifests → seed-secrets → deploy
+#  CD — docker → update-manifests → seed-secrets → deploy
 #
 #  Triggered automatically after CI passes on `main` or a `v*.*.*` tag, or
-#  manually via the "Run workflow" button (workflow_dispatch).
+#  manually via "Run workflow" (workflow_dispatch).
 #
 #  Job graph (linear so the run page reads top-to-bottom):
 #
-#    prepare ──► docker (matrix × 5) ──► update-manifests ──► seed-secrets ──► deploy
-#       │                                                          │            │
-#       └──────────────── outputs (sha, tag, namespace …) ─────────┴────────────┘
+#    docker (matrix × 5) ──► update-manifests ──► seed-secrets ──► deploy
 #
-#  Best-practice notes for anyone editing this file:
+#  Notes for anyone editing this file:
 #    • Workflow-level `permissions: contents: read` — every job opts INTO any
-#      extra scope it needs (`packages: write`, `id-token: write`, etc).
-#    • `prepare` resolves "what we're shipping" once and exposes it as outputs
-#      so downstream jobs never re-derive it (no drift, single summary block).
-#    • Docker, AWS-OIDC, and kubectl-to-EKS are all isolated to the smallest
-#      job that needs them. Everything cluster-related goes through the
-#      reusable composite at .github/actions/aws-eks-kubectl/.
-#    • The `deploy` job uses a **GitHub Environment** (`production-eks`),
-#      which:
-#        – exposes a clickable URL on the run page,
-#        – produces a Deployments timeline under Settings → Environments,
-#        – is the place to add manual approval / wait-timer protection rules
-#          when this leaves demo territory.
+#      extra scope it needs (`packages: write`, `id-token: write`, etc.).
+#    • Each job resolves its own values inline (DH namespace, image tag, …).
+#      We tried a centralized `prepare` job that exposed those as outputs;
+#      `needs.prepare.outputs.namespace` came back empty in the docker job
+#      for reasons we couldn't pin down on this repo, so we reverted.
 #    • `seed-secrets` and `deploy` auto-skip when `vars.EKS_CLUSTER_NAME` is
 #      unset, so the workflow stays green for users who only consume images.
-#    • `workflow_dispatch` lets ops re-deploy from the UI without a code push
-#      (e.g. after rotating a Secret in GitHub).
+#    • `deploy` uses a **GitHub Environment** (`production-eks`) which gives
+#      you a clickable URL on the run page + a Deployments timeline under
+#      Settings → Environments + an obvious place to attach approval rules
+#      when this leaves demo territory.
 # ─────────────────────────────────────────────────────────────────────────────
 name: CD
 
 on:
   workflow_run:
-    workflows: [ CI ]
-    types: [ completed ]
+    workflows: [CI]
+    types: [completed]
   workflow_dispatch:
     inputs:
       reason:
-        description: "Why are you running CD manually? (shows up in the summary)"
+        description: 'Why are you running CD manually? (shows up in logs)'
         required: false
-        default: "manual deploy"
+        default: 'manual deploy'
 
 permissions:
   contents: read
@@ -50,11 +43,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # ─── 0. Resolve build context, gate the whole pipeline once ──────────────
-  prepare:
-    name: Resolve build context
-    runs-on: ubuntu-24.04
-    timeout-minutes: 2
+  # ─── 1. Build + push every service image in parallel ─────────────────────
+  docker:
+    name: Build & push · ${{ matrix.service }}
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'workflow_run' &&
@@ -62,96 +53,48 @@ jobs:
        github.event.workflow_run.event == 'push' &&
        (github.event.workflow_run.head_branch == 'main' ||
         startsWith(github.event.workflow_run.head_branch, 'v')))
-    outputs:
-      sha: ${{ steps.ctx.outputs.sha }}
-      short_sha: ${{ steps.ctx.outputs.short_sha }}
-      branch: ${{ steps.ctx.outputs.branch }}
-      tag: ${{ steps.ctx.outputs.tag }}
-      namespace: ${{ steps.ctx.outputs.namespace }}
-      is_main: ${{ steps.ctx.outputs.is_main }}
-      eks_enabled: ${{ steps.ctx.outputs.eks_enabled }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write     # future-proof for GHCR push
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-svc, shop-svc, order-svc, web]
     steps:
-      - name: Compute context + write summary
+      - name: Resolve commit SHA + branch
         id: ctx
-        env:
-          # Read DH username straight from the same Secret docker/login-action
-          # uses. We tried `vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME`
-          # and got an empty value at runtime even with the Variable defined,
-          # so we sidestep the `||` fallback entirely. Login already proves
-          # this Secret is set; reusing it is the bulletproof source of truth.
-          DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
-          EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
-          DISPATCH_REASON: ${{ inputs.reason }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
             SHA="${{ github.sha }}"
             BRANCH="${{ github.ref_name }}"
-            TRIGGER="manual ($DISPATCH_REASON)"
           else
             SHA="${{ github.event.workflow_run.head_sha }}"
             BRANCH="${{ github.event.workflow_run.head_branch }}"
-            TRIGGER="ci-success"
           fi
-
-          # Defensive: print resolved length (not value) so empty secrets are
-          # easy to spot in logs without exposing actual content.
-          echo "DOCKERHUB_NAMESPACE length: ${#DOCKERHUB_NAMESPACE}"
-
-          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
-            echo "::error::secrets.DOCKERHUB_USERNAME is empty. Set it in Settings → Secrets and variables → Actions → Secrets."
-            exit 1
-          fi
-
-          SHORT="${SHA:0:7}"
-          TAG="sha-${SHORT}"
-          IS_MAIN=false; [ "$BRANCH" = 'main' ] && IS_MAIN=true
-          EKS=false;     [ -n "$EKS_CLUSTER_NAME" ] && EKS=true
-
           {
             echo "sha=$SHA"
-            echo "short_sha=$SHORT"
             echo "branch=$BRANCH"
-            echo "tag=$TAG"
-            echo "namespace=$DOCKERHUB_NAMESPACE"
-            echo "is_main=$IS_MAIN"
-            echo "eks_enabled=$EKS"
           } >> "$GITHUB_OUTPUT"
 
-          {
-            echo "# Build context"
-            echo ""
-            echo "| Key | Value |"
-            echo "| --- | --- |"
-            echo "| Trigger          | \`$TRIGGER\` |"
-            echo "| Branch / ref     | \`$BRANCH\` |"
-            echo "| Commit           | \`$SHA\` |"
-            echo "| Image tag        | \`$TAG\` |"
-            echo "| Docker namespace | \`$DOCKERHUB_NAMESPACE\` |"
-            echo "| \`:latest\` push?  | $IS_MAIN |"
-            echo "| EKS deploy?      | $EKS |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # ─── 1. Build + push every service image in parallel ─────────────────────
-  docker:
-    name: Build & push · ${{ matrix.service }}
-    needs: prepare
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    permissions:
-      contents: read
-      packages: write # future-proof for GHCR push
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [ api-gateway, user-svc, shop-svc, order-svc, web ]
-    env:
-      IMAGE: ${{ needs.prepare.outputs.namespace }}/shop-${{ matrix.service }}
-    steps:
-      - name: Checkout (commit ${{ needs.prepare.outputs.short_sha }})
+      - name: Checkout (commit ${{ steps.ctx.outputs.sha }})
         uses: actions/checkout@v6
         with:
-          ref: ${{ needs.prepare.outputs.sha }}
+          ref: ${{ steps.ctx.outputs.sha }}
+
+      - name: Resolve Docker Hub namespace
+        id: ns
+        env:
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::Set repo variable DOCKERHUB_NAMESPACE or secret DOCKERHUB_USERNAME"
+            exit 1
+          fi
+          echo "namespace=$DOCKERHUB_NAMESPACE" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -169,11 +112,11 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE }}
+          images: ${{ steps.ns.outputs.namespace }}/shop-${{ matrix.service }}
           tags: |
-            type=raw,value=${{ needs.prepare.outputs.tag }}
-            type=raw,value=${{ needs.prepare.outputs.branch }}
-            type=raw,value=latest,enable=${{ needs.prepare.outputs.is_main == 'true' }}
+            type=sha,format=short,prefix=sha-,sha=${{ steps.ctx.outputs.sha }}
+            type=raw,value=${{ steps.ctx.outputs.branch }}
+            type=raw,value=latest,enable=${{ steps.ctx.outputs.branch == 'main' }}
 
       - name: Build & push
         id: push
@@ -211,14 +154,14 @@ jobs:
   # ─── 2. Bump kustomization image tags + commit back to main ──────────────
   update-manifests:
     name: Bump k8s image tags
-    needs: [ prepare, docker ]
+    needs: docker
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
-      contents: write # to push the bump commit back to main
+      contents: write     # to push the bump commit back to main
     outputs:
       bumped_sha: ${{ steps.commit.outputs.bump_sha }}
-      skipped: ${{ steps.commit.outputs.skipped }}
+      tag: ${{ steps.tag.outputs.value }}
     steps:
       - name: Checkout main
         uses: actions/checkout@v6
@@ -227,16 +170,40 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
+      - name: Resolve Docker Hub namespace
+        id: ns
+        env:
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
+        run: |
+          set -euo pipefail
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::Set repo variable DOCKERHUB_NAMESPACE or secret DOCKERHUB_USERNAME"
+            exit 1
+          fi
+          echo "namespace=$DOCKERHUB_NAMESPACE" >> "$GITHUB_OUTPUT"
+
       - name: Install kustomize
         uses: imranismail/setup-kustomize@v2
         with:
-          kustomize-version: "5.4.3"
+          kustomize-version: '5.4.3'
 
-      - name: Bump image tags in infra/k8s/kustomization.yaml
+      - name: Compute tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = 'workflow_dispatch' ]; then
+            SHA="${{ github.sha }}"
+          else
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          fi
+          SHORT="${SHA:0:7}"
+          echo "value=sha-${SHORT}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump image tags
         working-directory: infra/k8s
         env:
-          NS: ${{ needs.prepare.outputs.namespace }}
-          TAG: ${{ needs.prepare.outputs.tag }}
+          NS: ${{ steps.ns.outputs.namespace }}
+          TAG: ${{ steps.tag.outputs.value }}
         run: |
           set -euo pipefail
           for svc in api-gateway web user-svc shop-svc order-svc; do
@@ -249,11 +216,10 @@ jobs:
       - name: Commit & push
         id: commit
         env:
-          TAG: ${{ needs.prepare.outputs.tag }}
+          TAG: ${{ steps.tag.outputs.value }}
         run: |
           set -euo pipefail
           if git diff --quiet infra/k8s/kustomization.yaml; then
-            echo "skipped=true" >> "$GITHUB_OUTPUT"
             echo "::notice::Image tags already at ${TAG} — no commit needed."
             {
               echo "## Manifest bump → **skipped**"
@@ -268,7 +234,6 @@ jobs:
           git commit -m "chore(k8s): bump image tags to ${TAG} [skip ci]"
           git push origin HEAD:main
           BUMP=$(git rev-parse HEAD)
-          echo "skipped=false" >> "$GITHUB_OUTPUT"
           echo "bump_sha=$BUMP" >> "$GITHUB_OUTPUT"
           {
             echo "## Manifest bump → **committed**"
@@ -283,12 +248,12 @@ jobs:
   # ─── 3. Seed shop-app-secrets in the cluster from GH Secrets ─────────────
   seed-secrets:
     name: Seed cluster secrets
-    needs: [ prepare, update-manifests ]
-    if: needs.prepare.outputs.eks_enabled == 'true'
+    needs: update-manifests
+    if: vars.EKS_CLUSTER_NAME != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      id-token: write # OIDC -> AWS IAM role assumption
+      id-token: write     # OIDC -> AWS IAM role assumption
       contents: read
     steps:
       - name: Checkout main
@@ -337,8 +302,6 @@ jobs:
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           set -euo pipefail
-          # `--dry-run=client -o yaml | kubectl apply -f -` is the canonical
-          # "create or update" pattern for Secrets — never errors on re-runs.
           kubectl create secret generic shop-app-secrets \
             --namespace shop \
             --from-literal=DATABASE_URL="$DATABASE_URL" \
@@ -362,78 +325,78 @@ jobs:
           else
             echo "## seed-secrets → **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
           fi
+
   # ─── 4. Apply the EKS overlay + wait for rollout ─────────────────────────
-  # deploy:
-  #   name: Deploy to EKS
-  #   needs: [prepare, update-manifests, seed-secrets]
-  #   if: needs.prepare.outputs.eks_enabled == 'true'
-  #   runs-on: ubuntu-24.04
-  #   timeout-minutes: 15
-  #   permissions:
-  #     id-token: write
-  #     contents: read
-  #   environment:
-  #     name: production-eks
-  #     url: ${{ steps.url.outputs.app_url }}
-  #   steps:
-  #     # If update-manifests committed a bump, deploy that exact SHA so we
-  #     # never race a concurrent push. Falls back to the original CI SHA
-  #     # when there was nothing to bump (re-run with no code change).
-  #     - name: Checkout deploy ref
-  #       uses: actions/checkout@v6
-  #       with:
-  #         ref: ${{ needs.update-manifests.outputs.bumped_sha || needs.prepare.outputs.sha }}
-  #         fetch-depth: 1
+  deploy:
+    name: Deploy to EKS
+    needs: [update-manifests, seed-secrets]
+    if: vars.EKS_CLUSTER_NAME != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    environment:
+      name: production-eks
+      url: ${{ steps.url.outputs.app_url }}
+    steps:
+      # If update-manifests committed a bump, deploy that exact SHA so we
+      # never race a concurrent push. Falls back to main HEAD when nothing
+      # was bumped (re-run with no code change → manifests already current).
+      - name: Checkout deploy ref
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.update-manifests.outputs.bumped_sha || 'main' }}
+          fetch-depth: 1
 
-  #     - name: Configure AWS + kubectl
-  #       uses: ./.github/actions/aws-eks-kubectl
-  #       with:
-  #         aws-role: ${{ secrets.AWS_ROLE_TO_ASSUME }}
-  #         aws-region: ${{ vars.AWS_REGION }}
-  #         eks-cluster: ${{ vars.EKS_CLUSTER_NAME }}
+      - name: Configure AWS + kubectl
+        uses: ./.github/actions/aws-eks-kubectl
+        with:
+          aws-role: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+          eks-cluster: ${{ vars.EKS_CLUSTER_NAME }}
 
-  #     - name: Apply EKS overlay (kubectl built-in kustomize)
-  #       run: |
-  #         set -euo pipefail
-  #         kubectl apply -k infra/aws/eks-overlay/
+      - name: Apply EKS overlay (kubectl built-in kustomize)
+        run: |
+          set -euo pipefail
+          kubectl apply -k infra/aws/eks-overlay/
 
-  #     - name: Wait for rollout (5m per deployment)
-  #       id: rollout
-  #       run: |
-  #         set -euo pipefail
-  #         {
-  #           echo "## Rollout"
-  #           echo ""
-  #           echo "| Deployment | Result |"
-  #           echo "| --- | --- |"
-  #         } >> "$GITHUB_STEP_SUMMARY"
-  #         fail=0
-  #         for d in api-gateway web user-svc shop-svc order-svc; do
-  #           echo "── rollout: $d ──"
-  #           if kubectl -n shop rollout status "deployment/$d" --timeout=5m; then
-  #             echo "| \`$d\` | OK |" >> "$GITHUB_STEP_SUMMARY"
-  #           else
-  #             echo "| \`$d\` | **FAILED** |" >> "$GITHUB_STEP_SUMMARY"
-  #             fail=1
-  #           fi
-  #         done
-  #         exit "$fail"
+      - name: Wait for rollout (5m per deployment)
+        run: |
+          set -euo pipefail
+          {
+            echo "## Rollout"
+            echo ""
+            echo "| Deployment | Result |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          fail=0
+          for d in api-gateway web user-svc shop-svc order-svc; do
+            echo "── rollout: $d ──"
+            if kubectl -n shop rollout status "deployment/$d" --timeout=5m; then
+              echo "| \`$d\` | OK |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| \`$d\` | **FAILED** |" >> "$GITHUB_STEP_SUMMARY"
+              fail=1
+            fi
+          done
+          exit "$fail"
 
-  #     - name: Resolve public URL
-  #       id: url
-  #       run: |
-  #         set -euo pipefail
-  #         HOST=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
-  #                  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-  #         if [ -z "$HOST" ]; then
-  #           echo "::warning::ingress-nginx ELB has no hostname yet (still provisioning?)"
-  #           kubectl -n ingress-nginx get svc ingress-nginx-controller
-  #           exit 0
-  #         fi
-  #         URL="http://$HOST"
-  #         echo "app_url=$URL" >> "$GITHUB_OUTPUT"
-  #         {
-  #           echo "## Live URL"
-  #           echo ""
-  #           echo "[$URL]($URL)"
-  #         } >> "$GITHUB_STEP_SUMMARY"
+      - name: Resolve public URL
+        id: url
+        run: |
+          set -euo pipefail
+          HOST=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+                   -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          if [ -z "$HOST" ]; then
+            echo "::warning::ingress-nginx ELB has no hostname yet (still provisioning?)"
+            kubectl -n ingress-nginx get svc ingress-nginx-controller
+            exit 0
+          fi
+          URL="http://$HOST"
+          echo "app_url=$URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Live URL"
+            echo ""
+            echo "[$URL]($URL)"
+          } >> "$GITHUB_STEP_SUMMARY"
