@@ -23,6 +23,5 @@ terraform.tfvars
 k8s-local/
 terraform/
 docker-compose.yml
-
 docker-compose.yml
 secrets.yaml
