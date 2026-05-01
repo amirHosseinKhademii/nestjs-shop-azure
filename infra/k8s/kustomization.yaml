@@ -33,16 +33,16 @@ resources:
 images:
 - name: docker.io/amir2575/shop-api-gateway
   newName: docker.io/amir2575/shop-api-gateway
-  newTag: sha-68cf7ed
+  newTag: sha-262885e
 - name: docker.io/amir2575/shop-order-svc
   newName: docker.io/amir2575/shop-order-svc
-  newTag: sha-68cf7ed
+  newTag: sha-262885e
 - name: docker.io/amir2575/shop-shop-svc
   newName: docker.io/amir2575/shop-shop-svc
-  newTag: sha-68cf7ed
+  newTag: sha-262885e
 - name: docker.io/amir2575/shop-user-svc
   newName: docker.io/amir2575/shop-user-svc
-  newTag: sha-68cf7ed
+  newTag: sha-262885e
 - name: docker.io/amir2575/shop-web
   newName: docker.io/amir2575/shop-web
-  newTag: sha-68cf7ed
+  newTag: sha-262885e
