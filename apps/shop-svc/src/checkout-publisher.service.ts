@@ -59,10 +59,9 @@ export class CheckoutPublisherService implements OnModuleDestroy {
 
   private async forwardHttp(body: CheckoutBody) {
     const orderUrl = process.env.ORDER_SVC_URL ?? 'http://localhost:3003';
-    const key = process.env.INTERNAL_API_KEY ?? 'dev-internal-key';
     await firstValueFrom(
       this.http.post(`${orderUrl}/internal/checkout`, body, {
-        headers: { 'x-internal-key': key },
+        headers: { 'x-correlation-id': body.correlationId },
       }),
     );
     this.log.log(`Forwarded CheckoutRequested ${body.correlationId} via HTTP`);

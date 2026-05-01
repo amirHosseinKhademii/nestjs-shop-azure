@@ -20,9 +20,20 @@ import {
 } from './graphql/graphql-context';
 import { HealthController } from './health.controller';
 
+const monorepoRootEnv = join(__dirname, '..', '..', '..', '.env');
+const apiGatewayEnv = join(__dirname, '..', '.env');
+
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: [
+        monorepoRootEnv,
+        apiGatewayEnv,
+        join(process.cwd(), '.env'),
+        join(process.cwd(), 'apps', 'api-gateway', '.env'),
+      ],
+    }),
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
       imports: [ConfigModule],

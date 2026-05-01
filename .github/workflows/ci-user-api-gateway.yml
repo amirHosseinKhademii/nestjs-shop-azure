@@ -1,4 +1,4 @@
-name: CI — user-svc, api-gateway & shop-svc
+name: CI — user-svc, api-gateway, shop-svc & order-svc
 
 on:
   push:
@@ -7,6 +7,8 @@ on:
       - 'apps/user-svc/**'
       - 'apps/api-gateway/**'
       - 'apps/shop-svc/**'
+      - 'apps/order-svc/**'
+      - 'packages/shared/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -23,15 +25,21 @@ on:
       - 'apps/shop-svc/eslint.config.mjs'
       - 'apps/shop-svc/jest.config.cjs'
       - 'apps/shop-svc/tsconfig.build.json'
+      - 'apps/order-svc/eslint.config.mjs'
+      - 'apps/order-svc/jest.config.cjs'
+      - 'apps/order-svc/tsconfig.build.json'
       - 'apps/user-svc/Dockerfile'
       - 'apps/api-gateway/Dockerfile'
       - 'apps/shop-svc/Dockerfile'
+      - 'apps/order-svc/Dockerfile'
   pull_request:
     branches: [main]
     paths:
       - 'apps/user-svc/**'
       - 'apps/api-gateway/**'
       - 'apps/shop-svc/**'
+      - 'apps/order-svc/**'
+      - 'packages/shared/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -48,9 +56,13 @@ on:
       - 'apps/shop-svc/eslint.config.mjs'
       - 'apps/shop-svc/jest.config.cjs'
       - 'apps/shop-svc/tsconfig.build.json'
+      - 'apps/order-svc/eslint.config.mjs'
+      - 'apps/order-svc/jest.config.cjs'
+      - 'apps/order-svc/tsconfig.build.json'
       - 'apps/user-svc/Dockerfile'
       - 'apps/api-gateway/Dockerfile'
       - 'apps/shop-svc/Dockerfile'
+      - 'apps/order-svc/Dockerfile'
 
 concurrency:
   group: ci-user-gateway-${{ github.workflow }}-${{ github.ref }}
@@ -131,6 +143,14 @@ jobs:
             -t shop-nest/shop-svc:ci \
             .
 
+      - name: Docker build order-svc
+        run: |
+          docker build \
+            -f apps/order-svc/Dockerfile \
+            -t shop-nest/order-svc:${{ github.sha }} \
+            -t shop-nest/order-svc:ci \
+            .
+
       - name: List images
         run: |
           echo "user-svc"
@@ -139,3 +159,5 @@ jobs:
           docker images shop-nest/api-gateway --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
           echo "shop-svc"
           docker images shop-nest/shop-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
+          echo "order-svc"
+          docker images shop-nest/order-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'

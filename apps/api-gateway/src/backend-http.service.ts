@@ -11,9 +11,13 @@ export class BackendHttpService {
     private readonly config: ConfigService,
   ) {}
 
+  /**
+   * Headers forwarded from gateway → backends. The gateway is the only ingress
+   * point (NetworkPolicy/cluster + ingress in prod, internal docker network in dev),
+   * so backends trust `x-user-id` here as a post-JWT-verification identity.
+   */
   private internalHeaders(extra?: Record<string, string>, correlationId?: string) {
     return {
-      'x-internal-key': this.config.get('INTERNAL_API_KEY', 'dev-internal-key'),
       ...(correlationId ? { 'x-correlation-id': correlationId } : {}),
       ...extra,
     };
@@ -71,15 +75,10 @@ export class BackendHttpService {
     }
   }
 
-  async me(authHeader: string | undefined, correlationId?: string) {
+  async me(userId: string, correlationId?: string) {
     const { data } = await firstValueFrom(
       this.http.get(`${this.userBase}/auth/me`, {
-        headers: this.internalHeaders(
-          {
-            Authorization: authHeader ?? '',
-          },
-          correlationId,
-        ),
+        headers: this.internalHeaders({ 'x-user-id': userId }, correlationId),
       }),
     );
     return data;

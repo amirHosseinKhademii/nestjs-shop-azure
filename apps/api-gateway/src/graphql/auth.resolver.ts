@@ -1,5 +1,5 @@
 import { Resolver, Mutation, Args, Query, Context } from '@nestjs/graphql';
-import { UseGuards } from '@nestjs/common';
+import { UnauthorizedException, UseGuards } from '@nestjs/common';
 import { GqlJwtGuard } from './gql-jwt.guard';
 import { AuthPayloadGql, UserGql } from './types';
 import { BackendHttpService } from '../backend-http.service';
@@ -34,7 +34,8 @@ export class AuthResolver {
   @Query(() => UserGql)
   @UseGuards(GqlJwtGuard)
   async me(@Context() ctx: GatewayGraphqlContext) {
-    const auth = ctx.req.headers?.authorization as string | undefined;
-    return this.backend.me(auth, ctx.correlationId) as Promise<UserGql>;
+    const userId = ctx.req.user?.sub;
+    if (!userId) throw new UnauthorizedException();
+    return this.backend.me(userId, ctx.correlationId) as Promise<UserGql>;
   }
 }
