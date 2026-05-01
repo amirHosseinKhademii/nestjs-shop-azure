@@ -21,6 +21,5 @@ k8s-local/
 terraform/
 docker-compose.yml
 
-azure-pipelines.yml
 docker-compose.yml
 secrets.yaml

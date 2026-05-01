@@ -3,9 +3,10 @@
 #   kubectl apply -k infra/k8s/
 #
 # CI bumps the `images[*].newTag` field below to the immutable short-SHA tag
-# pushed by the `docker` job in `.github/workflows/ci-cd.yml`. Anything
-# applying this overlay (manual `kubectl apply -k`, ArgoCD, Flux, ...) will
-# pick up the new tags automatically.
+# pushed by the CD pipeline (.github/workflows/cd.yml or
+# azure-pipelines-cd.yml). Anything applying this overlay (manual
+# `kubectl apply -k`, ArgoCD, Flux, ...) will pick up the new tags
+# automatically.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

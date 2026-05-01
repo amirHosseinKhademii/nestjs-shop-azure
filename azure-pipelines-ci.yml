@@ -1,0 +1,114 @@
+# Azure DevOps CI: format → verify → build (per service, in parallel).
+#
+# Mirrors .github/workflows/ci.yml. Runs on every push to main / v*.*.*
+# tags and every PR targeting main. Does NOT push images or touch the
+# cluster — that is azure-pipelines-cd.yml's job.
+
+name: ci-$(Build.SourceBranchName)-$(Build.BuildId)
+
+trigger:
+  branches:
+    include:
+      - main
+  tags:
+    include:
+      - v*.*.*
+  paths:
+    include:
+      - apps/*
+      - packages/*
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - turbo.json
+      - .prettierrc
+      - .prettierignore
+      - azure-pipelines-ci.yml
+      - azure-pipelines-cd.yml
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - apps/*
+      - packages/*
+      - package.json
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - turbo.json
+      - .prettierrc
+      - .prettierignore
+      - azure-pipelines-ci.yml
+      - azure-pipelines-cd.yml
+
+variables:
+  NODE_VERSION: '24'
+
+stages:
+  - stage: Format
+    displayName: Format (Prettier)
+    jobs:
+      - job: Prettier
+        pool:
+          vmImage: ubuntu-latest
+        timeoutInMinutes: 5
+        steps:
+          - template: .azure/steps/setup-pnpm-node.yml
+          - script: pnpm run format:check
+            displayName: Prettier check
+
+  - stage: Verify
+    displayName: Verify (lint, typecheck, test)
+    dependsOn: Format
+    jobs:
+      - job: Verify
+        timeoutInMinutes: 15
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          matrix:
+            api-gateway: { service: api-gateway }
+            user-svc:    { service: user-svc }
+            shop-svc:    { service: shop-svc }
+            order-svc:   { service: order-svc }
+            web:         { service: web }
+        steps:
+          - template: .azure/steps/setup-pnpm-node.yml
+          - task: Cache@2
+            displayName: Cache Turbo
+            inputs:
+              key: 'turbo | "$(Agent.OS)" | $(service) | $(Build.SourceVersion)'
+              restoreKeys: |
+                turbo | "$(Agent.OS)" | $(service)
+              path: .turbo
+          - script: pnpm exec turbo run lint typecheck test --filter=@shop/$(service)
+            displayName: Lint, typecheck, test ($(service))
+
+  - stage: Build
+    displayName: Build (compile)
+    dependsOn: Verify
+    jobs:
+      - job: Build
+        timeoutInMinutes: 15
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          matrix:
+            api-gateway: { service: api-gateway }
+            user-svc:    { service: user-svc }
+            shop-svc:    { service: shop-svc }
+            order-svc:   { service: order-svc }
+            web:         { service: web }
+        steps:
+          - template: .azure/steps/setup-pnpm-node.yml
+          - task: Cache@2
+            displayName: Cache Turbo
+            inputs:
+              key: 'turbo | "$(Agent.OS)" | $(service) | $(Build.SourceVersion)'
+              restoreKeys: |
+                turbo | "$(Agent.OS)" | $(service)
+              path: .turbo
+          - script: pnpm exec turbo run build --filter=@shop/$(service)
+            displayName: Build ($(service))

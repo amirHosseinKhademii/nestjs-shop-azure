@@ -1,0 +1,176 @@
+# Azure DevOps CD: docker push → update-manifests.
+#
+# Mirrors .github/workflows/cd.yml. Triggered ONLY when the CI pipeline
+# (azure-pipelines-ci.yml) finishes successfully on `main` or a `v*.*.*`
+# release tag. Manual `trigger: none` + `pr: none` so the only way this
+# pipeline runs is via the `pipelines.shop-ci` resource trigger.
+#
+# Required pipeline variables / service connections (set in Azure DevOps):
+#
+#   • Service connection (Docker Registry):  $(DOCKER_REGISTRY_CONNECTION)
+#       - Type: Docker Registry → Docker Hub
+#       - Used by the Docker@2 task to log in & push.
+#   • Pipeline variable:  DOCKERHUB_NAMESPACE  (e.g. amir2575)
+#   • For the manifest commit-back step:
+#       - Pipeline variable:  GIT_USER_EMAIL   (bot email)
+#       - Pipeline variable:  GIT_USER_NAME    (bot name)
+#       - The build's System.AccessToken needs "Contribute" on the repo.
+#         Project Settings → Repos → Permissions → Build Service →
+#         Contribute = Allow.
+#
+# Loop-safety: the commit message includes `[skip ci]`; pushes from the
+# build-service identity also do not by default re-trigger CI when the
+# pipeline's `Build validation` policy is configured normally — but the
+# `[skip ci]` marker is the belt-and-braces guarantee.
+
+name: cd-$(Build.SourceBranchName)-$(Build.BuildId)
+
+trigger: none
+pr: none
+
+resources:
+  pipelines:
+    - pipeline: shop-ci
+      source: shop-ci         # the *display name* you give the CI pipeline
+                              # in Azure DevOps when you import
+                              # azure-pipelines-ci.yml
+      trigger:
+        branches:
+          include:
+            - main
+        tags:
+          include:
+            - v*.*.*
+
+variables:
+  NODE_VERSION: '24'
+  KUSTOMIZE_VERSION: '5.4.3'
+  # Resolve the commit CI built. resources.pipelines.<alias>.sourceCommit is
+  # the canonical "what was built" SHA we need so docker tags + kustomize
+  # bumps stay in lockstep.
+  CI_HEAD_SHA: $(resources.pipeline.shop-ci.sourceCommit)
+  CI_HEAD_BRANCH: $(resources.pipeline.shop-ci.sourceBranch)
+
+stages:
+  - stage: Docker
+    displayName: Build & push images
+    jobs:
+      - job: Push
+        timeoutInMinutes: 20
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          matrix:
+            api-gateway: { service: api-gateway }
+            user-svc:    { service: user-svc }
+            shop-svc:    { service: shop-svc }
+            order-svc:   { service: order-svc }
+            web:         { service: web }
+        steps:
+          - checkout: self
+            # Build the exact commit CI validated, not the tip of main.
+            fetchDepth: 1
+
+          - script: |
+              set -e
+              if [ -z "$(DOCKERHUB_NAMESPACE)" ]; then
+                echo "##vso[task.logissue type=error]Set pipeline variable DOCKERHUB_NAMESPACE"
+                exit 1
+              fi
+              git checkout $(CI_HEAD_SHA)
+              SHORT="$(echo "$(CI_HEAD_SHA)" | cut -c1-7)"
+              echo "##vso[task.setvariable variable=SHA_TAG]sha-${SHORT}"
+              # Strip refs/heads/ or refs/tags/ to a bare ref name for tagging.
+              REF="$(echo "$(CI_HEAD_BRANCH)" | sed -E 's#^refs/(heads|tags)/##')"
+              echo "##vso[task.setvariable variable=REF_TAG]${REF}"
+            displayName: Resolve tags
+
+          - task: Docker@2
+            displayName: Buildx setup (QEMU + Buildx)
+            inputs:
+              command: login
+              containerRegistry: $(DOCKER_REGISTRY_CONNECTION)
+
+          - task: Docker@2
+            displayName: Build & push $(service) (sha-tag)
+            inputs:
+              command: buildAndPush
+              containerRegistry: $(DOCKER_REGISTRY_CONNECTION)
+              repository: $(DOCKERHUB_NAMESPACE)/shop-$(service)
+              dockerfile: apps/$(service)/Dockerfile
+              buildContext: '.'
+              tags: |
+                $(SHA_TAG)
+                $(REF_TAG)
+
+          - task: Docker@2
+            displayName: Tag :latest (main only)
+            condition: and(succeeded(), eq(variables['CI_HEAD_BRANCH'], 'refs/heads/main'))
+            inputs:
+              command: buildAndPush
+              containerRegistry: $(DOCKER_REGISTRY_CONNECTION)
+              repository: $(DOCKERHUB_NAMESPACE)/shop-$(service)
+              dockerfile: apps/$(service)/Dockerfile
+              buildContext: '.'
+              tags: |
+                latest
+
+  - stage: UpdateManifests
+    displayName: Bump k8s image tags
+    dependsOn: Docker
+    condition: succeeded()
+    jobs:
+      - job: Bump
+        timeoutInMinutes: 5
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+            persistCredentials: true     # so we can push back via System.AccessToken
+            fetchDepth: 0
+            clean: true
+
+          - script: |
+              set -e
+              git checkout main
+              git pull --ff-only origin main
+            displayName: Switch to main
+
+          - script: |
+              set -e
+              curl -sLo /tmp/kustomize.tar.gz \
+                "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv$(KUSTOMIZE_VERSION)/kustomize_v$(KUSTOMIZE_VERSION)_linux_amd64.tar.gz"
+              tar -xzf /tmp/kustomize.tar.gz -C /usr/local/bin
+              kustomize version
+            displayName: Install kustomize $(KUSTOMIZE_VERSION)
+
+          - script: |
+              set -e
+              SHORT="$(echo "$(CI_HEAD_SHA)" | cut -c1-7)"
+              TAG="sha-${SHORT}"
+              echo "Bumping kustomization.yaml to ${TAG}"
+              cd infra/k8s
+              for svc in api-gateway web user-svc shop-svc order-svc; do
+                kustomize edit set image \
+                  "docker.io/$(DOCKERHUB_NAMESPACE)/shop-${svc}=docker.io/$(DOCKERHUB_NAMESPACE)/shop-${svc}:${TAG}"
+              done
+              echo "── kustomization.yaml after bump ──"
+              cat kustomization.yaml
+              echo "##vso[task.setvariable variable=SHA_TAG]${TAG}"
+            displayName: Bump image tags
+
+          - script: |
+              set -e
+              if git diff --quiet infra/k8s/kustomization.yaml; then
+                echo "No image tag changes — nothing to commit."
+                exit 0
+              fi
+              git config user.name  "$(GIT_USER_NAME)"
+              git config user.email "$(GIT_USER_EMAIL)"
+              git add infra/k8s/kustomization.yaml
+              git commit -m "chore(k8s): bump image tags to $(SHA_TAG) [skip ci]"
+              # System.AccessToken is injected by `persistCredentials: true`.
+              git push origin HEAD:main
+            displayName: Commit & push
+            env:
+              SYSTEM_ACCESSTOKEN: $(System.AccessToken)

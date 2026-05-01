@@ -1,0 +1,159 @@
+# CD: docker push → update-manifests.
+#
+# Triggered AFTER the CI workflow finishes successfully on `main` or a
+# `v*.*.*` release tag. PR runs of CI never trigger CD.
+#
+# Why `workflow_run` instead of a `push` trigger:
+#   - Guarantees CD never runs unless lint/typecheck/test/build all passed.
+#   - Single source of truth for image promotion: green CI → ship.
+#   - Pushes from GITHUB_TOKEN do not re-trigger workflows, so the
+#     manifests-bump commit is loop-safe.
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+concurrency:
+  group: cd-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: false
+
+jobs:
+  docker:
+    name: Build & push image (${{ matrix.service }})
+    if: |
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      (github.event.workflow_run.head_branch == 'main' ||
+       startsWith(github.event.workflow_run.head_branch, 'v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+    steps:
+      - name: Checkout (the exact commit CI ran against)
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve namespace
+        id: ns
+        env:
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::Set repo variable DOCKERHUB_NAMESPACE (Settings → Variables) or secret DOCKERHUB_USERNAME"
+            exit 1
+          fi
+          echo "namespace=$DOCKERHUB_NAMESPACE" >> "$GITHUB_OUTPUT"
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.ns.outputs.namespace }}/shop-${{ matrix.service }}
+          # workflow_run-triggered runs report event=workflow_run, so the
+          # `type=ref` and `type=semver` rules need an explicit ref to work
+          # against the upstream CI run's head ref.
+          tags: |
+            type=sha,format=short,prefix=sha-,sha=${{ github.event.workflow_run.head_sha }}
+            type=raw,value=${{ github.event.workflow_run.head_branch }}
+            type=raw,value=latest,enable=${{ github.event.workflow_run.head_branch == 'main' }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.service }}/Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=shop-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=shop-${{ matrix.service }}
+          provenance: false
+
+  # Bumps `infra/k8s/kustomization.yaml` to the immutable short-SHA tag the
+  # docker job just pushed, then commits back to main. ArgoCD / Flux (or a
+  # manual `kubectl apply -k infra/k8s/`) will pick up the new tags.
+  update-manifests:
+    name: Bump k8s image tags
+    needs: docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Resolve namespace
+        id: ns
+        env:
+          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
+        run: |
+          if [ -z "$DOCKERHUB_NAMESPACE" ]; then
+            echo "::error::Set repo variable DOCKERHUB_NAMESPACE or secret DOCKERHUB_USERNAME"
+            exit 1
+          fi
+          echo "namespace=$DOCKERHUB_NAMESPACE" >> "$GITHUB_OUTPUT"
+
+      - name: Install kustomize
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: '5.4.3'
+
+      - name: Compute tag
+        id: tag
+        run: |
+          # Same shape as docker/metadata-action's `type=sha,format=short`.
+          SHORT="$(echo "${{ github.event.workflow_run.head_sha }}" | cut -c1-7)"
+          echo "value=sha-${SHORT}" >> "$GITHUB_OUTPUT"
+
+      - name: Bump image tags
+        working-directory: infra/k8s
+        env:
+          NS: ${{ steps.ns.outputs.namespace }}
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          for svc in api-gateway web user-svc shop-svc order-svc; do
+            kustomize edit set image \
+              "docker.io/${NS}/shop-${svc}=docker.io/${NS}/shop-${svc}:${TAG}"
+          done
+          echo "── kustomization.yaml after bump ──"
+          cat kustomization.yaml
+
+      - name: Commit & push
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          if git diff --quiet infra/k8s/kustomization.yaml; then
+            echo "No image tag changes — nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add infra/k8s/kustomization.yaml
+          git commit -m "chore(k8s): bump image tags to ${TAG} [skip ci]"
+          git push origin HEAD:main

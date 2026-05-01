@@ -1,0 +1,114 @@
+# CI: format → verify → build (per service, in parallel via matrix).
+#
+# Runs on every push and PR. Does NOT push images or touch the cluster — that
+# is the CD workflow's job, which runs only after CI passes on `main` or a
+# `v*.*.*` release tag (see .github/workflows/cd.yml).
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*.*.*']
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".prettierrc"
+      - ".prettierignore"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/cd.yml"
+      - ".github/actions/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - "turbo.json"
+      - ".prettierrc"
+      - ".prettierignore"
+      - ".github/workflows/ci.yml"
+      - ".github/workflows/cd.yml"
+      - ".github/actions/**"
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  format:
+    name: Prettier (workspace)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup & install
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Prettier
+        run: pnpm run format:check
+
+  verify:
+    name: Verify (${{ matrix.service }})
+    needs: format
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Setup & install
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache Turbo
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ matrix.service }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ matrix.service }}-
+
+      - name: Lint, typecheck, test
+        run: pnpm exec turbo run lint typecheck test --filter=@shop/${{ matrix.service }}
+
+  build:
+    name: Build (${{ matrix.service }})
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Setup & install
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache Turbo
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ matrix.service }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ matrix.service }}-
+
+      - name: Build
+        run: pnpm exec turbo run build --filter=@shop/${{ matrix.service }}
