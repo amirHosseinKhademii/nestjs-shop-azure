@@ -46,7 +46,7 @@ Runs as **three separate jobs** (each shows up on its own in PR **Checks** and i
 2. **Build** — `nest build` for both apps  
 3. **Docker** — build and tag images locally (no push)
 
-pnpm is installed from the root `packageManager` field (`pnpm@9.14.2`); the workflow does not pin a second version in `pnpm/action-setup`.
+CI uses **Node 24** (`actions/setup-node@v6`) and **Corepack** so the pnpm version comes only from the root `packageManager` field (`pnpm@9.14.2`). `pnpm/action-setup` is avoided because it still targets the deprecated Actions Node 20 runtime.
 
 ## Observability
 

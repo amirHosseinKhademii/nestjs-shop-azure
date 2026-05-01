@@ -48,12 +48,12 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify (format, lint, typecheck, test)
+    name: Pre build (format, lint, typecheck, test)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup & install
         uses: ./.github/actions/setup-pnpm-node
@@ -77,7 +77,7 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup & install
         uses: ./.github/actions/setup-pnpm-node
@@ -86,13 +86,13 @@ jobs:
         run: pnpm run build:services
 
   docker:
-    name: Docker (tag only)
+    name: Containerize (tag only)
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Prepare Docker build context
         run: mkdir -p packages
