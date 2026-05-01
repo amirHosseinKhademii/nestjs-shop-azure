@@ -43,7 +43,7 @@ export function App() {
         </ErrorBoundary>
       </main>
       <footer className="footer">
-        <span className="muted small">Shop Nest Azure · Demo storefront</span>
+        <span className="muted small">Shop Nest Aws · Demo storefront</span>
       </footer>
     </div>
   );
