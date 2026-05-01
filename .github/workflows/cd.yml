@@ -74,7 +74,12 @@ jobs:
       - name: Compute context + write summary
         id: ctx
         env:
-          DOCKERHUB_NAMESPACE: ${{ vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME }}
+          # Read DH username straight from the same Secret docker/login-action
+          # uses. We tried `vars.DOCKERHUB_NAMESPACE || secrets.DOCKERHUB_USERNAME`
+          # and got an empty value at runtime even with the Variable defined,
+          # so we sidestep the `||` fallback entirely. Login already proves
+          # this Secret is set; reusing it is the bulletproof source of truth.
+          DOCKERHUB_NAMESPACE: ${{ secrets.DOCKERHUB_USERNAME }}
           EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
           DISPATCH_REASON: ${{ inputs.reason }}
         run: |
@@ -89,8 +94,12 @@ jobs:
             TRIGGER="ci-success"
           fi
 
+          # Defensive: print resolved length (not value) so empty secrets are
+          # easy to spot in logs without exposing actual content.
+          echo "DOCKERHUB_NAMESPACE length: ${#DOCKERHUB_NAMESPACE}"
+
           if [ -z "$DOCKERHUB_NAMESPACE" ]; then
-            echo "::error::Set repo variable DOCKERHUB_NAMESPACE or secret DOCKERHUB_USERNAME"
+            echo "::error::secrets.DOCKERHUB_USERNAME is empty. Set it in Settings → Secrets and variables → Actions → Secrets."
             exit 1
           fi
 
