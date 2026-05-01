@@ -27,15 +27,21 @@ import { HealthController } from './health.controller';
       driver: ApolloDriver,
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: () => ({
-        autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
-        sortSchema: true,
-        context: ({ req, res }: ApolloContextFactoryArgs): GatewayGraphqlContext => ({
-          req: req as GatewayGraphqlContext['req'],
-          res,
-          correlationId: pickCorrelationId(req),
-        }),
-      }),
+      useFactory: (config: ConfigService) => {
+        const isProd = config.get<string>('NODE_ENV') === 'production';
+        return {
+          autoSchemaFile: join(process.cwd(), 'src/schema.gql'),
+          sortSchema: true,
+          debug: !isProd,
+          playground: !isProd,
+          introspection: !isProd,
+          context: ({ req, res }: ApolloContextFactoryArgs): GatewayGraphqlContext => ({
+            req: req as GatewayGraphqlContext['req'],
+            res,
+            correlationId: pickCorrelationId(req),
+          }),
+        };
+      },
     }),
     HttpModule.register({ timeout: 15000 }),
     JwtModule.registerAsync({

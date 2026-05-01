@@ -5,7 +5,7 @@ This file mirrors the approved architecture plan. **Do not treat this as executa
 ## Purpose and constraints
 
 - **Goal**: Portfolio-grade Azure microservices demo: event-driven integration, GraphQL + polyglot DBs, Redis, rate limiting, K8s, CI/CD (GitHub Actions + Azure Pipelines), Terraform, observability — kept simple (happy paths, stubs where enterprise complexity dominates).
-- **Source alignment**: Interview materials at `../nestjs/nest-task/interview` (especially `azure/full-stack-kubernetes-ecosystem.md`, `02-guides/system-architecture-walkthrough.md`).
+
 - **Repo**: This repo implements the blueprint; extended interview Q&A stays in the interview folder (linked from README).
 
 ## Traffic rules

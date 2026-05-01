@@ -47,8 +47,12 @@ export interface OrderDto {
 }
 
 export function pickCorrelationId(req: ApolloContextFactoryArgs['req']): string | undefined {
-  if (req.correlationId) return req.correlationId;
+  if (typeof req.correlationId === 'string' && req.correlationId.trim()) {
+    return req.correlationId.trim();
+  }
   const h = req.headers['x-correlation-id'];
-  if (Array.isArray(h)) return h[0];
-  return h;
+  if (typeof h === 'string' && h.trim()) return h.trim();
+  const first = Array.isArray(h) ? h[0] : undefined;
+  if (typeof first === 'string' && first.trim()) return first.trim();
+  return undefined;
 }

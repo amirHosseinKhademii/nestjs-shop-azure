@@ -1,4 +1,4 @@
-name: CI — user-svc & api-gateway
+name: CI — user-svc, api-gateway & shop-svc
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
     paths:
       - 'apps/user-svc/**'
       - 'apps/api-gateway/**'
+      - 'apps/shop-svc/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -19,13 +20,18 @@ on:
       - 'apps/api-gateway/eslint.config.mjs'
       - 'apps/api-gateway/jest.config.cjs'
       - 'apps/api-gateway/tsconfig.build.json'
+      - 'apps/shop-svc/eslint.config.mjs'
+      - 'apps/shop-svc/jest.config.cjs'
+      - 'apps/shop-svc/tsconfig.build.json'
       - 'apps/user-svc/Dockerfile'
       - 'apps/api-gateway/Dockerfile'
+      - 'apps/shop-svc/Dockerfile'
   pull_request:
     branches: [main]
     paths:
       - 'apps/user-svc/**'
       - 'apps/api-gateway/**'
+      - 'apps/shop-svc/**'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
@@ -39,8 +45,12 @@ on:
       - 'apps/api-gateway/eslint.config.mjs'
       - 'apps/api-gateway/jest.config.cjs'
       - 'apps/api-gateway/tsconfig.build.json'
+      - 'apps/shop-svc/eslint.config.mjs'
+      - 'apps/shop-svc/jest.config.cjs'
+      - 'apps/shop-svc/tsconfig.build.json'
       - 'apps/user-svc/Dockerfile'
       - 'apps/api-gateway/Dockerfile'
+      - 'apps/shop-svc/Dockerfile'
 
 concurrency:
   group: ci-user-gateway-${{ github.workflow }}-${{ github.ref }}
@@ -113,9 +123,19 @@ jobs:
             -t shop-nest/api-gateway:ci \
             .
 
+      - name: Docker build shop-svc
+        run: |
+          docker build \
+            -f apps/shop-svc/Dockerfile \
+            -t shop-nest/shop-svc:${{ github.sha }} \
+            -t shop-nest/shop-svc:ci \
+            .
+
       - name: List images
         run: |
           echo "user-svc"
           docker images shop-nest/user-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
           echo "api-gateway"
           docker images shop-nest/api-gateway --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'
+          echo "shop-svc"
+          docker images shop-nest/shop-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'

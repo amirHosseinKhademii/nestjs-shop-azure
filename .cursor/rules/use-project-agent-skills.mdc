@@ -1,0 +1,21 @@
+---
+description: Use bundled .agents/skills for Nest, GraphQL, Mongo, Postgres, Node, and React work
+alwaysApply: true
+---
+
+# Project skills (read when relevant)
+
+This repo vendors skills under **`.agents/skills/<skill-name>/SKILL.md`**. For tasks that match a skill, **read that `SKILL.md` first** (use the Read tool) and follow its guidance alongside existing user rules.
+
+| Task area | Skill folder | When |
+|-----------|----------------|------|
+| NestJS modules, DI, guards, microservices | `nestjs-best-practices` | `apps/*` Nest services, api-gateway |
+| GraphQL schema / Apollo patterns | `graphql-schema` | api-gateway GraphQL, schema design |
+| Mongoose / MongoDB | `mongoose-mongodb` | shop-svc, Mongo schemas |
+| Postgres queries / perf / SQL | `supabase-postgres-best-practices` | user-svc, order-svc, TypeORM SQL |
+| Express/Fastify-style Node APIs (general) | `nodejs-backend-patterns` | Cross-cutting backend patterns |
+| React / client perf | `vercel-react-best-practices` | `apps/web` when tracked |
+
+If multiple skills apply (e.g. Nest + GraphQL), read each relevant `SKILL.md` before large edits.
+
+Keep skill usage proportional: small typo fixes do not require loading full skills; new features, refactors, or reviews should.
