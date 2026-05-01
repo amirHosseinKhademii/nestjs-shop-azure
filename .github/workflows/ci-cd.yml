@@ -1,68 +1,68 @@
-name: CI — user-svc, api-gateway, shop-svc & order-svc
+name: CI — CD pipeline
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
     paths:
-      - 'apps/user-svc/**'
-      - 'apps/api-gateway/**'
-      - 'apps/shop-svc/**'
-      - 'apps/order-svc/**'
-      - 'packages/shared/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.github/workflows/ci-user-api-gateway.yml'
-      - '.github/actions/**'
-      - '.prettierrc'
-      - '.prettierignore'
-      - 'apps/user-svc/eslint.config.mjs'
-      - 'apps/user-svc/jest.config.cjs'
-      - 'apps/user-svc/tsconfig.build.json'
-      - 'apps/api-gateway/eslint.config.mjs'
-      - 'apps/api-gateway/jest.config.cjs'
-      - 'apps/api-gateway/tsconfig.build.json'
-      - 'apps/shop-svc/eslint.config.mjs'
-      - 'apps/shop-svc/jest.config.cjs'
-      - 'apps/shop-svc/tsconfig.build.json'
-      - 'apps/order-svc/eslint.config.mjs'
-      - 'apps/order-svc/jest.config.cjs'
-      - 'apps/order-svc/tsconfig.build.json'
-      - 'apps/user-svc/Dockerfile'
-      - 'apps/api-gateway/Dockerfile'
-      - 'apps/shop-svc/Dockerfile'
-      - 'apps/order-svc/Dockerfile'
+      - "apps/user-svc/**"
+      - "apps/api-gateway/**"
+      - "apps/shop-svc/**"
+      - "apps/order-svc/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/ci-user-api-gateway.yml"
+      - ".github/actions/**"
+      - ".prettierrc"
+      - ".prettierignore"
+      - "apps/user-svc/eslint.config.mjs"
+      - "apps/user-svc/jest.config.cjs"
+      - "apps/user-svc/tsconfig.build.json"
+      - "apps/api-gateway/eslint.config.mjs"
+      - "apps/api-gateway/jest.config.cjs"
+      - "apps/api-gateway/tsconfig.build.json"
+      - "apps/shop-svc/eslint.config.mjs"
+      - "apps/shop-svc/jest.config.cjs"
+      - "apps/shop-svc/tsconfig.build.json"
+      - "apps/order-svc/eslint.config.mjs"
+      - "apps/order-svc/jest.config.cjs"
+      - "apps/order-svc/tsconfig.build.json"
+      - "apps/user-svc/Dockerfile"
+      - "apps/api-gateway/Dockerfile"
+      - "apps/shop-svc/Dockerfile"
+      - "apps/order-svc/Dockerfile"
   pull_request:
-    branches: [main]
+    branches: [ main ]
     paths:
-      - 'apps/user-svc/**'
-      - 'apps/api-gateway/**'
-      - 'apps/shop-svc/**'
-      - 'apps/order-svc/**'
-      - 'packages/shared/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'pnpm-workspace.yaml'
-      - '.github/workflows/ci-user-api-gateway.yml'
-      - '.github/actions/**'
-      - '.prettierrc'
-      - '.prettierignore'
-      - 'apps/user-svc/eslint.config.mjs'
-      - 'apps/user-svc/jest.config.cjs'
-      - 'apps/user-svc/tsconfig.build.json'
-      - 'apps/api-gateway/eslint.config.mjs'
-      - 'apps/api-gateway/jest.config.cjs'
-      - 'apps/api-gateway/tsconfig.build.json'
-      - 'apps/shop-svc/eslint.config.mjs'
-      - 'apps/shop-svc/jest.config.cjs'
-      - 'apps/shop-svc/tsconfig.build.json'
-      - 'apps/order-svc/eslint.config.mjs'
-      - 'apps/order-svc/jest.config.cjs'
-      - 'apps/order-svc/tsconfig.build.json'
-      - 'apps/user-svc/Dockerfile'
-      - 'apps/api-gateway/Dockerfile'
-      - 'apps/shop-svc/Dockerfile'
-      - 'apps/order-svc/Dockerfile'
+      - "apps/user-svc/**"
+      - "apps/api-gateway/**"
+      - "apps/shop-svc/**"
+      - "apps/order-svc/**"
+      - "packages/shared/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/ci-user-api-gateway.yml"
+      - ".github/actions/**"
+      - ".prettierrc"
+      - ".prettierignore"
+      - "apps/user-svc/eslint.config.mjs"
+      - "apps/user-svc/jest.config.cjs"
+      - "apps/user-svc/tsconfig.build.json"
+      - "apps/api-gateway/eslint.config.mjs"
+      - "apps/api-gateway/jest.config.cjs"
+      - "apps/api-gateway/tsconfig.build.json"
+      - "apps/shop-svc/eslint.config.mjs"
+      - "apps/shop-svc/jest.config.cjs"
+      - "apps/shop-svc/tsconfig.build.json"
+      - "apps/order-svc/eslint.config.mjs"
+      - "apps/order-svc/jest.config.cjs"
+      - "apps/order-svc/tsconfig.build.json"
+      - "apps/user-svc/Dockerfile"
+      - "apps/api-gateway/Dockerfile"
+      - "apps/shop-svc/Dockerfile"
+      - "apps/order-svc/Dockerfile"
 
 concurrency:
   group: ci-user-gateway-${{ github.workflow }}-${{ github.ref }}
@@ -94,7 +94,8 @@ jobs:
         run: pnpm run format:check
 
       - name: Lint, typecheck, test (turbo)
-        run: pnpm exec turbo run lint typecheck test --filter='./apps/*-svc' --filter=@shop/api-gateway
+        run: pnpm exec turbo run lint typecheck test --filter='./apps/*-svc'
+          --filter=@shop/api-gateway
 
   build:
     name: Build (Nest)
