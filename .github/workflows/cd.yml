@@ -157,3 +157,157 @@ jobs:
           git add infra/k8s/kustomization.yaml
           git commit -m "chore(k8s): bump image tags to ${TAG} [skip ci]"
           git push origin HEAD:main
+
+  # Pushes the `shop-app-secrets` Secret into the EKS cluster from the
+  # corresponding GitHub Repository Secrets. Runs after every successful CD
+  # so a rotation = update the secret in GitHub + re-run the workflow.
+  #
+  # No secret manifest is ever stored in the repo. The Secret is created
+  # idempotently via `kubectl apply` of a dry-run-rendered YAML, so re-runs
+  # update existing values rather than failing on conflict.
+  #
+  # Skips automatically if the EKS deploy hasn't been wired up yet
+  # (vars.EKS_CLUSTER_NAME unset). That keeps the CD green for users who
+  # only care about image push + manifest bump.
+  seed-secrets:
+    name: Seed cluster secrets
+    needs: update-manifests
+    if: vars.EKS_CLUSTER_NAME != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write     # required for OIDC -> AWS IAM role assumption
+      contents: read
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Validate required secrets / vars are set
+        env:
+          AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          missing=()
+          for v in AWS_ROLE_TO_ASSUME AWS_REGION DATABASE_URL MONGO_URI REDIS_URL JWT_SECRET; do
+            if [ -z "${!v}" ]; then
+              missing+=("$v")
+            fi
+          done
+          if [ ${#missing[@]} -ne 0 ]; then
+            echo "::error::Missing required secrets/vars: ${missing[*]}"
+            echo "::error::Set them in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "All required secrets/vars present."
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Point kubectl at the EKS cluster
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+        run: |
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+          kubectl get nodes
+
+      - name: Ensure namespace exists
+        run: kubectl apply -f infra/k8s/namespace.yaml
+
+      - name: Seed shop-app-secrets (idempotent)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          # `--dry-run=client -o yaml | kubectl apply -f -` is the canonical
+          # "create or update" pattern for Secrets — it never errors on the
+          # second run and triggers a rolling restart of any Pod whose
+          # container envFrom's this Secret (when paired with reloader, etc).
+          kubectl create secret generic shop-app-secrets \
+            --namespace shop \
+            --from-literal=DATABASE_URL="$DATABASE_URL" \
+            --from-literal=MONGO_URI="$MONGO_URI" \
+            --from-literal=REDIS_URL="$REDIS_URL" \
+            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            --dry-run=client -o yaml | kubectl apply -f -
+          echo "── secret confirmed ──"
+          kubectl -n shop get secret shop-app-secrets \
+            -o jsonpath='{.metadata.name}: {.metadata.creationTimestamp}'; echo
+
+  # Final stage: actually deploy the app. Runs against the bumped
+  # `main` (so it picks up the new sha-<…> image tags committed by
+  # `update-manifests`) and uses the EKS demo overlay so it inherits all
+  # production manifests minus TLS/cert-manager/host-rule.
+  #
+  # `needs: seed-secrets` guarantees `shop-app-secrets` exists before
+  # any Pod that envFrom's it boots — otherwise the rollout would race
+  # and CrashLoop on missing secret keys.
+  deploy-eks:
+    name: Deploy to EKS
+    needs: [update-manifests, seed-secrets]
+    if: vars.EKS_CLUSTER_NAME != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout main (post-bump, with new image tags)
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Point kubectl at the EKS cluster
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+        run: |
+          aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+
+      - name: Apply EKS overlay
+        run: |
+          # `kubectl apply -k` uses kubectl's built-in kustomize, no extra
+          # install needed. The overlay references ../../k8s, so the
+          # checkout must include both paths (it does — single-repo).
+          kubectl apply -k infra/aws/eks-overlay/
+
+      - name: Wait for rollout
+        run: |
+          set -e
+          for d in api-gateway web user-svc shop-svc order-svc; do
+            echo "── rollout: $d ──"
+            kubectl -n shop rollout status "deployment/$d" --timeout=5m
+          done
+
+      - name: Print public URL
+        run: |
+          HOST=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+            -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          if [ -z "$HOST" ]; then
+            echo "::warning::ingress-nginx ELB has no hostname yet (still provisioning?)."
+            kubectl -n ingress-nginx get svc ingress-nginx-controller
+            exit 0
+          fi
+          echo "App is live at: http://$HOST"
+          echo "APP_URL=http://$HOST" >> "$GITHUB_ENV"
+          echo "## Deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "[http://$HOST](http://$HOST)" >> "$GITHUB_STEP_SUMMARY"

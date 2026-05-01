@@ -14,7 +14,6 @@ namespace: shop
 
 resources:
 - namespace.yaml
-- secrets.yaml
 - network-policies.yaml
 - user-svc.yaml
 - shop-svc.yaml
@@ -22,6 +21,12 @@ resources:
 - api-gateway.yaml
 - web.yaml
 - ingress.yaml
+# Note: `shop-app-secrets` is NOT applied from a manifest in this repo.
+# It is created by the `seed-secrets` job in `.github/workflows/cd.yml`
+# from GitHub Repository Secrets, before this kustomization is applied.
+# For a one-off manual deploy, copy `secrets.example.yaml` to
+# `secrets.yaml` (gitignored), then `kubectl apply -f secrets.yaml`
+# before `kubectl apply -k .`.
 
 # `name` here matches the `image:` field in the deployment YAMLs.
 # `newName` is the registry path; `newTag` is bumped by CI.
