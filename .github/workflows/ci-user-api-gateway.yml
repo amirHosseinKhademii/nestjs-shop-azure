@@ -10,6 +10,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/ci-user-api-gateway.yml'
+      - '.github/actions/**'
       - '.prettierrc'
       - '.prettierignore'
       - 'apps/user-svc/eslint.config.mjs'
@@ -29,6 +30,7 @@ on:
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
       - '.github/workflows/ci-user-api-gateway.yml'
+      - '.github/actions/**'
       - '.prettierrc'
       - '.prettierignore'
       - 'apps/user-svc/eslint.config.mjs'
@@ -45,27 +47,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  verify:
+    name: Verify (format, lint, typecheck, test)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
-          cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
+      - name: Setup & install
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Prettier
         run: pnpm run format:check
@@ -79,13 +70,34 @@ jobs:
       - name: Test
         run: pnpm run test:services
 
+  build:
+    name: Build (Nest)
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup & install
+        uses: ./.github/actions/setup-pnpm-node
+
       - name: Build
         run: pnpm run build:services
+
+  docker:
+    name: Docker (tag only)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Prepare Docker build context
         run: mkdir -p packages
 
-      - name: Docker build user-svc (tag only, no push)
+      - name: Docker build user-svc
         run: |
           docker build \
             -f apps/user-svc/Dockerfile \
@@ -93,7 +105,7 @@ jobs:
             -t shop-nest/user-svc:ci \
             .
 
-      - name: Docker build api-gateway (tag only, no push)
+      - name: Docker build api-gateway
         run: |
           docker build \
             -f apps/api-gateway/Dockerfile \
@@ -101,7 +113,7 @@ jobs:
             -t shop-nest/api-gateway:ci \
             .
 
-      - name: List built images
+      - name: List images
         run: |
           echo "user-svc"
           docker images shop-nest/user-svc --format 'table {{.Repository}}\t{{.Tag}}\t{{.Size}}'

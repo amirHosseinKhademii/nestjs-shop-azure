@@ -36,6 +36,18 @@ Copy `.env.example` files in each app or use root `docker-compose` env. For **Az
 | `infra/terraform` | Azure resources |
 | `infra/k8s` | Kubernetes manifests |
 
+## CI (user-svc + api-gateway)
+
+GitHub Actions workflow: [`.github/workflows/ci-user-api-gateway.yml`](.github/workflows/ci-user-api-gateway.yml).
+
+Runs as **three separate jobs** (each shows up on its own in PR **Checks** and in the **Actions** tab → workflow run → job list):
+
+1. **Verify** — Prettier, ESLint, TypeScript `tsc`, Jest  
+2. **Build** — `nest build` for both apps  
+3. **Docker** — build and tag images locally (no push)
+
+pnpm is installed from the root `packageManager` field (`pnpm@9.14.2`); the workflow does not pin a second version in `pnpm/action-setup`.
+
 ## Observability
 
 - **Correlation ID**: All Nest services attach/propagate `x-correlation-id` when missing.
