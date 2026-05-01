@@ -1,9 +1,12 @@
 # shop-nest-azure
 
-[![CI-CD](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci-user-api-gateway.yml/badge.svg?branch=main)](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci-user-api-gateway.yml)
+[![CI](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci.yml)
+[![CD](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/cd.yml/badge.svg?branch=main)](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/cd.yml)
 [![workflow runs](https://img.shields.io/badge/Actions-all%20runs-2088FF?logo=github)](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions)
 
-The badges above show **main-branch CI** on the repo home page (README). GitHub does not place the Actions pipeline on the overview by default—this is the usual way to surface it.
+The badges above show **main-branch CI + CD** on the repo home page (README).
+GitHub does not place the Actions pipeline on the overview by default — these
+badges are the usual way to surface it.
 
 Portfolio demo: React + NestJS microservices on Azure patterns — gateway (GraphQL), user, shop (Mongo + Redis), order (Postgres), Azure Service Bus between shop and order, Docker/K8s, Terraform, CI/CD, observability.
 
@@ -41,17 +44,59 @@ Checkout uses **`CHECKOUT_TRANSPORT=http`** in Compose so **shop-svc** POSTs to 
 | `infra/terraform` | Azure resources |
 | `infra/k8s` | Kubernetes manifests |
 
-## CI (user-svc, api-gateway & shop-svc)
+## CI / CD
 
-Workflow file: [`.github/workflows/ci-user-api-gateway.yml`](.github/workflows/ci-user-api-gateway.yml) · **Runs on GitHub:** [all Actions](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions) · [this workflow only](https://github.com/amirHosseinKhademii/nestjs-shop-azure/actions/workflows/ci-user-api-gateway.yml).
+Two pipelines per platform — **CI is always gated before CD**.
 
-Runs as **three separate jobs** (each shows up on its own in PR **Checks** and in the **Actions** tab → workflow run → job list):
+| Platform | CI | CD |
+| --- | --- | --- |
+| GitHub Actions | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) | [`.github/workflows/cd.yml`](.github/workflows/cd.yml) |
+| Azure DevOps   | [`azure-pipelines-ci.yml`](azure-pipelines-ci.yml)        | [`azure-pipelines-cd.yml`](azure-pipelines-cd.yml)        |
 
-1. **Verify** — Prettier, ESLint, TypeScript `tsc`, Jest (all three services)  
-2. **Build** — `nest build` for user-svc, api-gateway, and shop-svc  
-3. **Docker** — build and tag images for all three (no push)
+### CI — `format → verify → build`
 
-CI uses **Node 24** (`actions/setup-node@v6`) and **Corepack** so the pnpm version comes only from the root `packageManager` field (`pnpm@9.14.2`). `pnpm/action-setup` is avoided because it still targets the deprecated Actions Node 20 runtime.
+Runs on **every push to `main`/`v*.*.*` tags and every PR**, in parallel
+across all 5 services (`api-gateway`, `web`, `user-svc`, `shop-svc`,
+`order-svc`):
+
+1. **Format** — `pnpm run format:check` (Prettier, workspace-wide).
+2. **Verify** — `turbo run lint typecheck test --filter=@shop/<svc>`
+   (ESLint + `tsc --noEmit` + Jest / Vitest).
+3. **Build** — `turbo run build --filter=@shop/<svc>` (TypeScript / Vite
+   compilation, no Docker push).
+
+Uses **Node 24** + Corepack (pnpm version pinned via `packageManager` in the
+root `package.json`), and Turborepo task cache (`actions/cache@v5` /
+Azure `Cache@2`).
+
+### CD — `docker → update-manifests`
+
+Runs **only after CI succeeds** on `main` or a `v*.*.*` tag. Never runs for
+PRs. Trigger mechanism is the only difference between platforms:
+
+- **GitHub Actions:** `workflow_run` listener — `cd.yml` waits for `ci.yml`
+  to complete with `conclusion == 'success'`.
+- **Azure DevOps:** `resources.pipelines.shop-ci` declaration — Azure runs
+  `azure-pipelines-cd.yml` only after the named CI pipeline succeeds.
+
+Stages (per service, in parallel):
+
+1. **Docker** — buildx multi-tag push to Docker Hub:
+   - `sha-<7-char-sha>` — immutable, pinned by manifests.
+   - `<branch-or-tag>` — moving pointer (`main`, `v1.2.3`, ...).
+   - `latest` — only on `main`.
+2. **Update manifests** — `kustomize edit set image` against the
+   `images:` block of [`infra/k8s/kustomization.yaml`](infra/k8s/kustomization.yaml),
+   committed back to `main` with `[skip ci]` so ArgoCD / Flux (or a manual
+   `kubectl apply -k`) picks up the new tag.
+
+### Required secrets / variables
+
+| Setting | GitHub Actions | Azure DevOps |
+| --- | --- | --- |
+| Docker Hub credentials | `secrets.DOCKERHUB_USERNAME`, `secrets.DOCKERHUB_TOKEN` | Service Connection: `$(DOCKER_REGISTRY_CONNECTION)` |
+| Image namespace        | `vars.DOCKERHUB_NAMESPACE` (or fall back to `secrets.DOCKERHUB_USERNAME`) | Pipeline variable: `DOCKERHUB_NAMESPACE` |
+| Manifest commit-back   | Repo setting → Workflow permissions → **Read and write** | Project Settings → Repos → Build Service → **Contribute = Allow**. Pipeline vars `GIT_USER_NAME` / `GIT_USER_EMAIL` |
 
 ## Observability
 
