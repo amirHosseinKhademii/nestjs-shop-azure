@@ -46,6 +46,123 @@ Nothing else can talk to anything else. Enforced by:
    root filesystem, `seccompProfile: RuntimeDefault`,
    `automountServiceAccountToken: false`.
 
+## Load balancing — what's actually happening between the browser and a Pod
+
+The "ingress-nginx" entry in the trust model above is one box, but it's
+really three load-balancing layers stacked on top of each other. Each
+hop has a different scope, a different algorithm, and is configured in
+a completely different place. Knowing where each lives saves a lot of
+"why is traffic going to that pod?" debugging.
+
+```
+browser
+   │   1. DNS lookup → cloud LB IP/hostname
+   ▼
+┌─────────────────────────────────────────────────────────┐
+│  Cloud Load Balancer                                    │  LAYER 1 (L4 — TCP)
+│  e.g. AWS Classic ELB / NLB, Azure Standard LB          │
+│  Targets = all worker nodes on NodePort 31xxx           │
+│  Algorithm = round-robin (Classic ELB) / 5-tuple hash   │
+│              (NLB, Azure LB)                            │
+│  Provisioned automatically when ingress-nginx's Service │
+│  is type=LoadBalancer.                                  │
+└─────────────────────────────────────────────────────────┘
+   │   2. TCP packet → <random-node>:31xxx
+   ▼
+┌─────────────────────────────────────────────────────────┐
+│  Worker node — Linux kernel (kube-proxy)                │  LAYER 2 (L4 — iptables/IPVS)
+│  Rule installed by kube-proxy:                          │
+│    NodePort 31xxx → ClusterIP 10.x.x.x → ingress-nginx  │
+│                                          pod IP         │
+│  Algorithm = random (iptables) / round-robin (IPVS)     │
+│  Note: the chosen pod can live on ANY node — packet     │
+│  may be redirected across the pod network (Calico/CNI). │
+└─────────────────────────────────────────────────────────┘
+   │   3. TCP packet → ingress-nginx-controller pod
+   ▼
+┌─────────────────────────────────────────────────────────┐
+│  ingress-nginx pod (nginx process inside the container) │  LAYER 3 (L7 — HTTP)
+│  Terminates HTTP. Reads Host: header + URL path.        │
+│  Matches rules from this dir's `ingress.yaml`:          │
+│    /         → service "web"                            │
+│    /graphql  → service "api-gateway"                    │
+│  Looks up the matched service's EndpointSlice (live     │
+│  list of pod IPs — the controller watches the API       │
+│  server and rewrites the nginx upstream block whenever  │
+│  pods come up / die).                                   │
+│  Algorithm = round-robin across upstream pod IPs        │
+│              (configurable per-Ingress, see below)      │
+└─────────────────────────────────────────────────────────┘
+   │   4. HTTP request straight to pod IP:port
+   │      (bypasses ClusterIP — no extra kube-proxy hop)
+   ▼
+┌─────────────────────────────────────────────────────────┐
+│  app pod (web / api-gateway)                            │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Algorithm summary
+
+| Layer | Default algorithm | How to change it |
+| --- | --- | --- |
+| Cloud LB → nodes | round-robin (Classic ELB) / 5-tuple hash (NLB, Azure LB) | Switch LB type via the controller Helm values |
+| kube-proxy → ingress-nginx pods | random (iptables) / round-robin (IPVS) | Cluster-wide kube-proxy mode |
+| ingress-nginx → app pods | round-robin | Annotation on the `Ingress` resource |
+
+ingress-nginx supports a few alternatives via annotations:
+
+```yaml
+# Cookie-based stickiness (e.g. for a checkout flow)
+nginx.ingress.kubernetes.io/affinity: cookie
+nginx.ingress.kubernetes.io/session-cookie-name: shop-route
+nginx.ingress.kubernetes.io/session-cookie-max-age: "3600"
+
+# Latency-aware (exponentially weighted moving average)
+nginx.ingress.kubernetes.io/load-balance: ewma
+
+# Hash by client IP — also gives you stickiness, no cookies
+nginx.ingress.kubernetes.io/upstream-hash-by: $remote_addr
+```
+
+For a stateless setup like ours (every backend is horizontally scalable
+and stateless), the default round-robin is the right choice.
+
+### `externalTrafficPolicy: Cluster` vs `Local` — the trade-off
+
+| | `Cluster` (default) | `Local` |
+| --- | --- | --- |
+| Extra kube-proxy hop | yes (one extra network hop) | no |
+| Client source IP visible to nginx | no — SNAT'd to the node IP | yes — real client IP |
+| Even load distribution | yes — packets fan out to all nginx pods | uneven — only nodes hosting a nginx pod get traffic |
+| Cloud LB health check behavior | every node looks healthy | only nodes-with-nginx-pod look healthy |
+
+Production recipe: run ingress-nginx as a **DaemonSet** (so every node
+hosts one) **plus** `externalTrafficPolicy: Local`. You get real client
+IPs in your access logs and one fewer hop, with no uneven-load problem
+because every node has a controller pod.
+
+For a small demo cluster, `Cluster` (the default) is fine.
+
+### Cloud-specific knobs worth knowing
+
+**AWS** — pick NLB instead of Classic ELB for production:
+
+```bash
+helm upgrade ingress-nginx ingress-nginx/ingress-nginx \
+  -n ingress-nginx \
+  --set controller.service.type=LoadBalancer \
+  --set controller.service.annotations."service\.beta\.kubernetes\.io/aws-load-balancer-type"=nlb \
+  --set controller.service.externalTrafficPolicy=Local
+```
+
+NLB is cheaper, faster, preserves source IP natively, and uses 5-tuple
+hashing (so connections from the same client stick to the same node).
+
+**Azure** — Standard LB is the default and is the right choice. If you
+need **static** public IPs, pre-create them and reference via
+`controller.service.loadBalancerIP` + `controller.service.annotations`.
+TL;DR
+Your browser hits one AWS ELB, which load-balances at L4 across all worker nodes. The kernel on whatever node receives the packet redirects it (also L4) to one of the ingress-nginx pods. That pod terminates HTTP, looks at the URL, and load-balances at L7 directly to your app pods. Three layers of LB, each with a different algorithm and a different scope, stacked into a single transparent pipeline.
 ## Prerequisites
 
 - Cluster with a CNI that enforces NetworkPolicy (Cilium / Calico).
