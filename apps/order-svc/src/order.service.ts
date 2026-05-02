@@ -1,4 +1,5 @@
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { ordersCreatedTotal } from '@shop/observability';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { Order } from './entities/order.entity';
@@ -80,6 +81,7 @@ export class OrderService {
       });
 
       this.log.log(`Order ${order.id} created for correlation ${body.correlationId}`);
+      ordersCreatedTotal.inc({ result: 'success' });
       return manager.findOneOrFail(Order, {
         where: { id: order.id },
         relations: ['lines'],

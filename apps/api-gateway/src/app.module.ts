@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ObservabilityModule } from '@shop/observability';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
 import { HttpModule } from '@nestjs/axios';
@@ -34,6 +35,7 @@ const apiGatewayEnv = join(__dirname, '..', '.env');
         join(process.cwd(), 'apps', 'api-gateway', '.env'),
       ],
     }),
+    ObservabilityModule.forRoot({ serviceName: 'api-gateway' }),
     GraphQLModule.forRootAsync<ApolloDriverConfig>({
       driver: ApolloDriver,
       imports: [ConfigModule],

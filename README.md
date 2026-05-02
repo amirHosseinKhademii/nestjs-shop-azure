@@ -13,6 +13,7 @@ Portfolio demo: React + NestJS microservices on Azure patterns — gateway (Grap
 ## Documentation
 
 - **[PLAN.md](./PLAN.md)** — architecture blueprint and implementation order.
+- **[docs/observability.md](./docs/observability.md)** — Grafana Cloud LGTM stack (Alloy, Mimir, Loki, Tempo, Faro), labels, runbook.
 - **[infra/azure/aks-overlay/azure-guide.md](./infra/azure/aks-overlay/azure-guide.md)** — first-time Azure → AKS deploy walkthrough (account → cluster → CD → live URL → teardown).
 
 ## Quick start (local)

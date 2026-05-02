@@ -158,3 +158,62 @@ execFileSync('kubectl', ['apply', '-f', '-'], {
 });
 
 console.log(`✅ ${SECRET_NAME} applied to ${NAMESPACE}`);
+
+// ── Optional: Grafana Cloud → `grafana-cloud-credentials` / `observability` ─
+const GRAFANA_SECRET = process.env.GRAFANA_SECRET_NAME ?? 'grafana-cloud-credentials';
+const GRAFANA_NS = process.env.GRAFANA_NAMESPACE ?? 'observability';
+const GRAFANA_KEYS = [
+  'MIMIR_REMOTE_WRITE_URL',
+  'MIMIR_USER',
+  'MIMIR_API_KEY',
+  'LOKI_URL',
+  'LOKI_USER',
+  'LOKI_API_KEY',
+  'TEMPO_OTLP_URL',
+  'TEMPO_USER',
+  'TEMPO_API_KEY',
+];
+
+const grafanaLiterals = [];
+for (const k of GRAFANA_KEYS) {
+  if (env[k]) grafanaLiterals.push(`--from-literal=${k}=${env[k]}`);
+}
+
+if (grafanaLiterals.length > 0) {
+  if (grafanaLiterals.length !== GRAFANA_KEYS.length) {
+    die(
+      `Grafana Cloud: if you set any of ${GRAFANA_KEYS.join(', ')}, you must set all ${GRAFANA_KEYS.length} keys (partial set is not supported).`,
+    );
+  }
+  const OBS_NS_MANIFEST = resolve(REPO_ROOT, 'infra/k8s/observability/namespace.yaml');
+  console.log(`→ Grafana secret: ${GRAFANA_SECRET} → namespace ${GRAFANA_NS}`);
+  try {
+    execFileSync('kubectl', ['get', 'namespace', GRAFANA_NS], { stdio: 'ignore' });
+  } catch {
+    console.log(`→ Creating namespace from ${OBS_NS_MANIFEST}`);
+    execFileSync('kubectl', ['apply', '-f', OBS_NS_MANIFEST], { stdio: 'inherit' });
+  }
+  const gYaml = execFileSync(
+    'kubectl',
+    [
+      'create',
+      'secret',
+      'generic',
+      GRAFANA_SECRET,
+      '--namespace',
+      GRAFANA_NS,
+      ...grafanaLiterals,
+      '--dry-run=client',
+      '-o',
+      'yaml',
+    ],
+    { encoding: 'utf8' },
+  );
+  execFileSync('kubectl', ['apply', '-f', '-'], {
+    input: gYaml,
+    stdio: ['pipe', 'inherit', 'inherit'],
+  });
+  console.log(`✅ ${GRAFANA_SECRET} applied to ${GRAFANA_NS}`);
+} else {
+  console.log(`→ Grafana Cloud secret skipped (no ${GRAFANA_KEYS[0]} in .env)`);
+}

@@ -1,4 +1,5 @@
 import { Body, Controller, Post } from '@nestjs/common';
+import { orderCheckoutHandleSeconds } from '@shop/observability';
 import { CheckoutEventDto } from './dto/checkout-event.dto';
 import { OrderService } from './order.service';
 
@@ -13,7 +14,12 @@ export class InternalController {
   @Post('checkout')
   async checkout(@Body() body: CheckoutEventDto) {
     const idempotencyKey = body.correlationId;
-    const order = await this.orders.createOrderFromCheckout(body, idempotencyKey);
-    return { orderId: order.id, correlationId: body.correlationId };
+    const endTimer = orderCheckoutHandleSeconds.startTimer({ source: 'http' });
+    try {
+      const order = await this.orders.createOrderFromCheckout(body, idempotencyKey);
+      return { orderId: order.id, correlationId: body.correlationId };
+    } finally {
+      endTimer();
+    }
   }
 }

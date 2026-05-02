@@ -1,44 +1,18 @@
-import { Navigate, Route, Routes } from 'react-router-dom';
 import { Suspense } from 'react';
+import { Outlet } from 'react-router-dom';
 import { Nav } from './components/Nav';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Spinner } from './components/Spinner';
-import { RequireAuth } from './components/RequireAuth';
-import { LoginPage } from './pages/LoginPage';
-import { RegisterPage } from './pages/RegisterPage';
-import { ProductsPage } from './pages/ProductsPage';
-import { CartPage } from './pages/CartPage';
-import { OrdersPage } from './pages/OrdersPage';
 
-export function App() {
+/** Shell for React Router data API (`RouterProvider` + nested routes). */
+export function RootLayout() {
   return (
     <div className="app">
       <Nav />
       <main className="container" id="main">
         <ErrorBoundary>
           <Suspense fallback={<Spinner />}>
-            <Routes>
-              <Route path="/" element={<ProductsPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/register" element={<RegisterPage />} />
-              <Route
-                path="/cart"
-                element={
-                  <RequireAuth>
-                    <CartPage />
-                  </RequireAuth>
-                }
-              />
-              <Route
-                path="/orders"
-                element={
-                  <RequireAuth>
-                    <OrdersPage />
-                  </RequireAuth>
-                }
-              />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+            <Outlet />
           </Suspense>
         </ErrorBoundary>
       </main>
@@ -48,5 +22,3 @@ export function App() {
     </div>
   );
 }
-
-export default App;

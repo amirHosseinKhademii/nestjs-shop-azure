@@ -17,6 +17,7 @@ genuinely differ on a laptop are patched here.
 | Secret seeding | `.github/workflows/cd.yml#seed-secrets` | `./seed-secrets.mjs` (reads root `.env`) |
 | NetworkPolicy enforcement | enforced (Cilium / Calico CNI) | inert by default; enable with `--cni=calico` if you want to test it |
 | NetworkPolicy egress rules | 443 + storage ports | + `9092` (Redpanda) and `27782` (Aiven Kafka) |
+| Grafana Alloy | same as prod | **Optional** — same manifests apply; use smaller CPU/mem via `patches/alloy-daemonset.yaml` |
 
 External SaaS deps stay the same — Neon Postgres, MongoDB Atlas, Upstash
 Redis, Aiven Kafka — exactly as the cloud overlays use. The only thing
@@ -76,6 +77,22 @@ for d in api-gateway web user-svc shop-svc order-svc; do
   kubectl -n shop rollout status deployment/$d --timeout=180s
 done
 ```
+
+### Observability (optional)
+
+If your root `.env` includes **all** Grafana keys listed in
+[`infra/k8s/observability/secrets.example.yaml`](../../k8s/observability/secrets.example.yaml)
+(`MIMIR_*`, `LOKI_*`, `TEMPO_*`), `seed-secrets.mjs` also creates the
+`grafana-cloud-credentials` Secret in namespace `observability`.
+
+After `kubectl apply -k infra/local/minikube-overlay/`:
+
+```bash
+kubectl -n observability rollout status daemonset/alloy --timeout=180s
+kubectl -n observability logs daemonset/alloy --tail=50
+```
+
+Edit ConfigMap `web-runtime-config` in `shop` to enable Faro (`faroEnabled`, `faroCollectorUrl`, …) then restart the `web` Deployment so nginx picks up the new `config.json`.
 
 ## Open the SPA
 
@@ -191,3 +208,12 @@ minikube delete
 | 9 | `Kafka producer connect failed: ECONNREFUSED` in shop-svc | Aiven service is auto-suspended (free tier sleeps after 24h idle). Power it back on in the Aiven console. |
 | 10 | `This server does not host this topic-partition` | Topic `checkout-events` doesn't exist on Aiven. Run `node scripts/ensure-kafka-topic.mjs` from the repo root. |
 | 11 | Pods can't reach Aiven (`ETIMEDOUT` to `*.aivencloud.com:27782`) | You started Minikube with `--cni=calico` and the NetworkPolicy isn't allowing port 27782. The overlay already adds that port; if you've further customised the policy, double-check the `shop-svc` and `order-svc` `egress:` blocks. |
+
+
+
+
+running locally
+
+
+$ kubectl -n ingress-nginx port-forward svc/ingress-nginx-controller 8080:80 
+minikube -n ingress-nginx service ingress-nginx-controller  --url 

@@ -1,0 +1,6 @@
+{
+  "faroEnabled": true,
+  "faroCollectorUrl": "https://faro-collector-prod-xxx.grafana.net/collect/xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "faroAppKey": "",
+  "faroAppName": "shop-web"
+}

@@ -1,12 +1,14 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { BrowserRouter } from 'react-router-dom';
+import { RouterProvider } from 'react-router-dom';
 import { ApolloClient, ApolloProvider, InMemoryCache, createHttpLink, from } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 import { onError } from '@apollo/client/link/error';
-import App from './App';
+import { FaroErrorBoundary } from '@grafana/faro-react';
 import { AuthProvider } from './auth/AuthContext';
 import { getStoredToken } from './auth/auth-context';
+import { bootstrapObservability } from './observability';
+import { createAppRouter } from './router';
 import './styles.css';
 
 const httpLink = createHttpLink({
@@ -44,14 +46,19 @@ const client = new ApolloClient({
 const rootEl = document.getElementById('root');
 if (!rootEl) throw new Error('Root element #root not found');
 
-createRoot(rootEl).render(
-  <StrictMode>
-    <ApolloProvider client={client}>
-      <BrowserRouter>
-        <AuthProvider>
-          <App />
-        </AuthProvider>
-      </BrowserRouter>
-    </ApolloProvider>
-  </StrictMode>,
-);
+void (async () => {
+  await bootstrapObservability();
+  const router = createAppRouter();
+
+  createRoot(rootEl).render(
+    <StrictMode>
+      <ApolloProvider client={client}>
+        <FaroErrorBoundary>
+          <AuthProvider>
+            <RouterProvider router={router} />
+          </AuthProvider>
+        </FaroErrorBoundary>
+      </ApolloProvider>
+    </StrictMode>,
+  );
+})();

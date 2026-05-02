@@ -1,0 +1,27 @@
+{
+  "title": "Frontend — Faro (Grafana Cloud)",
+  "uid": "shop-web-rum",
+  "schemaVersion": 39,
+  "version": 1,
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "description": "Placeholder panels: wire these queries to your **Frontend Observability** / Faro data source in Grafana Cloud (session count, LCP, JS errors). Metrics names differ by SDK version — replace expr after first data arrives.",
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Faro / RUM (replace query after data flows)",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus" },
+      "description": "Use Grafana Cloud Frontend Observability for Faro. When Faro metrics are mirrored to Mimir, replace this stub with your recorded metric names (Web Vitals, sessions, errors).",
+      "targets": [
+        {
+          "expr": "vector(1)",
+          "legendFormat": "stub",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "templating": { "list": [] }
+}

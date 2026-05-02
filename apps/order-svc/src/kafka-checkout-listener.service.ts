@@ -1,5 +1,9 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { Consumer } from 'kafkajs';
+import {
+  kafkaConsumerLagSeconds,
+  orderCheckoutHandleSeconds,
+} from '@shop/observability';
 import { buildKafkaClient } from '@shop/shared';
 import { OrderService } from './order.service';
 import type { CheckoutPayload } from './order.service';
@@ -56,6 +60,12 @@ export class KafkaCheckoutListenerService implements OnModuleInit, OnModuleDestr
 
         const key = message.key?.toString('utf8') ?? body.correlationId ?? raw.slice(0, 120);
 
+        const ts = Number(message.timestamp);
+        if (!Number.isNaN(ts)) {
+          kafkaConsumerLagSeconds.set(Math.max(0, (Date.now() - ts) / 1000));
+        }
+
+        const endTimer = orderCheckoutHandleSeconds.startTimer({ source: 'kafka' });
         try {
           await this.orders.createOrderFromCheckout(body, key);
         } catch (e) {
@@ -65,6 +75,8 @@ export class KafkaCheckoutListenerService implements OnModuleInit, OnModuleDestr
           // semantically — Aiven also supports DLQ via a separate topic).
           this.log.error(`Failed processing message ${key}: ${(e as Error).message}`);
           throw e;
+        } finally {
+          endTimer();
         }
       },
     });

@@ -18,6 +18,10 @@ spec:
     metadata:
       labels:
         app: shop-svc
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '3002'
+        prometheus.io/path: '/metrics'
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -49,6 +53,18 @@ spec:
             # Kafka & Service Bus credentials, if any, come from `shop-app-secrets`.
             - name: CHECKOUT_TRANSPORT
               value: auto
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.observability.svc.cluster.local:4318
+            - name: OBS_ENABLED
+              value: 'true'
+            - name: OTEL_TRACES_SAMPLER
+              value: parentbased_traceidratio
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: '0.1'
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

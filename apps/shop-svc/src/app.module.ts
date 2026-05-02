@@ -1,6 +1,7 @@
 import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ObservabilityModule } from '@shop/observability';
 import { MongooseModule } from '@nestjs/mongoose';
 import { TerminusModule } from '@nestjs/terminus';
 import { HttpModule } from '@nestjs/axios';
@@ -25,6 +26,7 @@ const shopSvcEnv = join(__dirname, '..', '.env');
         join(process.cwd(), 'apps', 'shop-svc', '.env'),
       ],
     }),
+    ObservabilityModule.forRoot({ serviceName: 'shop-svc' }),
     MongooseModule.forRoot(process.env.MONGO_URI ?? 'mongodb://localhost:27017/shop', {
       serverSelectionTimeoutMS: 5_000,
       retryAttempts: 3,

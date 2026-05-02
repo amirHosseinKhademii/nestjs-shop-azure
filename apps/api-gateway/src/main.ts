@@ -1,10 +1,11 @@
-import './tracing';
+import { registerTracing, correlationIdMiddleware } from '@shop/observability';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
-import { correlationIdMiddleware } from './middleware/correlation-id.middleware';
+
+registerTracing('api-gateway');
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -12,14 +13,21 @@ async function bootstrap() {
   const logLevels = isProd
     ? (['error', 'warn', 'log'] as const)
     : (['error', 'warn', 'log', 'debug', 'verbose'] as const);
+  const usePino = process.env.LOG_FORMAT === 'json' || process.env.OBS_ENABLED === 'true';
   try {
     // Don't buffer logs: if NestFactory.create() throws (e.g. a module
     // initialisation error) buffered logs are silently lost and the pod
     // appears to exit with no output at all. Pay the few extra log lines
-    // for the boot sequence to keep diagnostics intact.
+    // for the boot sequence to keep diagnostics intact — unless Pino is on,
+    // in which case bufferLogs must be true for nestjs-pino.
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-      logger: [...logLevels],
+      ...(usePino ? { bufferLogs: true } : { logger: [...logLevels] }),
     });
+
+    if (usePino) {
+      const { Logger: PinoLogger } = await import('nestjs-pino');
+      app.useLogger(app.get(PinoLogger));
+    }
 
     const trustProxy = process.env.TRUST_PROXY !== '0';
     app.set('trust proxy', trustProxy ? 1 : false);

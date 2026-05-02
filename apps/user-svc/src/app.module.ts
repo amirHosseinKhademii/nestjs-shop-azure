@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ObservabilityModule } from '@shop/observability';
 import { TypeOrmModule } from '@nestjs/typeorm';
 // Health checks: registers HealthCheckService + TypeOrmHealthIndicator for /health/ready
 // (DB ping). Used with Kubernetes liveness vs readiness probes.
@@ -15,6 +16,7 @@ import { AuthModule } from './auth/auth.module';
       isGlobal: true,
       envFilePath: resolveServiceEnvFiles(__dirname, 'user-svc'),
     }),
+    ObservabilityModule.forRoot({ serviceName: 'user-svc' }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

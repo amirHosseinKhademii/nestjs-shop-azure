@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ServiceBusClient, ServiceBusReceiver } from '@azure/service-bus';
+import { orderCheckoutHandleSeconds } from '@shop/observability';
 import { OrderService } from './order.service';
 import type { CheckoutPayload } from './order.service';
 
@@ -37,6 +38,7 @@ export class ServiceBusListenerService implements OnModuleInit, OnModuleDestroy 
             const key = String(
               msg.messageId ?? body.correlationId ?? JSON.stringify(body).slice(0, 120),
             );
+            const endTimer = orderCheckoutHandleSeconds.startTimer({ source: 'servicebus' });
             try {
               await this.orders.createOrderFromCheckout(body, key);
               await this.receiver.completeMessage(msg);
@@ -46,6 +48,8 @@ export class ServiceBusListenerService implements OnModuleInit, OnModuleDestroy 
                 deadLetterReason: 'ProcessingFailed',
                 deadLetterErrorDescription: (e as Error).message,
               });
+            } finally {
+              endTimer();
             }
           }
         } catch (e) {

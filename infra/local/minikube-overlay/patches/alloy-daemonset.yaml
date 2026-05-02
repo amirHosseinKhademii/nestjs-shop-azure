@@ -1,0 +1,18 @@
+# Smaller Alloy footprint for laptop Minikube (strategic-merge patch).
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: alloy
+  namespace: observability
+spec:
+  template:
+    spec:
+      containers:
+        - name: alloy
+          resources:
+            requests:
+              cpu: 25m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi

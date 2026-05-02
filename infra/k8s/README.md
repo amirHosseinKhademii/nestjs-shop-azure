@@ -38,6 +38,10 @@ Nothing else can talk to anything else. Enforced by:
 3. **NetworkPolicy** (`network-policies.yaml`) defaults to deny-all and only the
    listed flows are allowed. Requires a CNI that enforces NetworkPolicy
    (Cilium / Calico — on AKS use `--network-plugin azure --network-policy cilium`).
+4. **Observability** — Grafana Alloy in namespace `observability` (`observability/`)
+   scrapes `/metrics`, tails logs from `shop`, and receives OTLP from backends.
+   See [`observability/README.md`](./observability/README.md) and
+   [`docs/observability.md`](../../docs/observability.md).
 4. **Pod Security Standards** (namespace label
    `pod-security.kubernetes.io/enforce: restricted`). Pods that try to run as
    root, keep capabilities, mount the host filesystem, etc. are rejected by the

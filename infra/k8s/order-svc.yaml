@@ -17,6 +17,10 @@ spec:
     metadata:
       labels:
         app: order-svc
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '3003'
+        prometheus.io/path: '/metrics'
     spec:
       automountServiceAccountToken: false
       securityContext:
@@ -49,6 +53,18 @@ spec:
             # listener auto-enables when KAFKA_BROKERS is present in
             # shop-app-secrets (see secrets.example.yaml). Set this env to
             # 'false' on overlays that should opt out (e.g. while migrating).
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.observability.svc.cluster.local:4318
+            - name: OBS_ENABLED
+              value: 'true'
+            - name: OTEL_TRACES_SAMPLER
+              value: parentbased_traceidratio
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: '0.1'
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

@@ -108,3 +108,10 @@ patches:
               port: 9092
             - protocol: TCP
               port: 27782
+
+  # Alloy: lower CPU/memory on Minikube.
+  - path: patches/alloy-daemonset.yaml
+    target:
+      kind: DaemonSet
+      name: alloy
+      namespace: observability

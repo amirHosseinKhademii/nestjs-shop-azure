@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ObservabilityModule } from '@shop/observability';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { TerminusModule } from '@nestjs/terminus';
 import { buildPostgresTypeOrmOptions, resolveServiceEnvFiles } from '@shop/shared';
@@ -19,6 +20,7 @@ import { KafkaCheckoutListenerService } from './kafka-checkout-listener.service'
       isGlobal: true,
       envFilePath: resolveServiceEnvFiles(__dirname, 'order-svc'),
     }),
+    ObservabilityModule.forRoot({ serviceName: 'order-svc' }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],

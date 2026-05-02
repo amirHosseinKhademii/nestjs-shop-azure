@@ -135,6 +135,18 @@ spec:
       ports:
         - protocol: TCP
           port: 3003
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: alloy
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
 
 ---
 # user-svc: ingress only from api-gateway, egress to Neon Postgres (TLS).
@@ -167,6 +179,18 @@ spec:
     - ports:
         - protocol: TCP
           port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: alloy
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
 
 ---
 # shop-svc: ingress only from api-gateway, egress to Atlas, Upstash, order-svc
@@ -212,6 +236,18 @@ spec:
     - ports:
         - protocol: TCP
           port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: alloy
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
 
 ---
 # order-svc: ingress from api-gateway (reads) AND shop-svc (HTTP checkout),
@@ -248,3 +284,15 @@ spec:
     - ports:
         - protocol: TCP
           port: 443
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: alloy
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318

@@ -1,20 +1,30 @@
+import { registerTracing, correlationIdMiddleware } from '@shop/observability';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
-import { correlationIdMiddleware } from './middleware/correlation-id.middleware';
+
+registerTracing('shop-svc');
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
+  const usePino = process.env.LOG_FORMAT === 'json' || process.env.OBS_ENABLED === 'true';
   try {
     const app = await NestFactory.create<NestExpressApplication>(AppModule, {
-      bufferLogs: true,
+      bufferLogs: usePino,
+      ...(!usePino
+        ? {
+            logger:
+              process.env.NODE_ENV === 'production'
+                ? (['error', 'warn', 'log'] as const)
+                : (['error', 'warn', 'log', 'debug', 'verbose'] as const),
+          }
+        : {}),
     });
-    const logLevels =
-      process.env.NODE_ENV === 'production'
-        ? (['error', 'warn', 'log'] as const)
-        : (['error', 'warn', 'log', 'debug', 'verbose'] as const);
-    app.useLogger([...logLevels]);
+    if (usePino) {
+      const { Logger: PinoLogger } = await import('nestjs-pino');
+      app.useLogger(app.get(PinoLogger));
+    }
 
     const trustProxy = process.env.TRUST_PROXY !== '0';
     app.set('trust proxy', trustProxy ? 1 : false);

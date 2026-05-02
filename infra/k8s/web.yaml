@@ -3,6 +3,24 @@
 # Public traffic enters via the Ingress only (see ingress.yaml + network-
 # policies.yaml). The pod itself never talks to backend services — the SPA in
 # the browser calls `/graphql`, which the Ingress routes to api-gateway.
+#
+# Runtime `/config.json` (Faro RUM, etc.) is supplied by ConfigMap `web-runtime-config`.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-runtime-config
+  namespace: shop
+  labels:
+    app: web
+data:
+  config.json: |
+    {
+      "faroEnabled": false,
+      "faroCollectorUrl": "",
+      "faroAppKey": "",
+      "faroAppName": "shop-web"
+    }
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -41,6 +59,10 @@ spec:
             capabilities:
               drop: ['ALL']
           volumeMounts:
+            - name: web-runtime-config
+              mountPath: /usr/share/nginx/html/config.json
+              subPath: config.json
+              readOnly: true
             # nginx needs writable temp dirs even when the rootfs is read-only.
             - name: nginx-cache
               mountPath: /var/cache/nginx
@@ -66,6 +88,9 @@ spec:
               cpu: 500m
               memory: 128Mi
       volumes:
+        - name: web-runtime-config
+          configMap:
+            name: web-runtime-config
         - name: nginx-cache
           emptyDir: {}
         - name: nginx-run

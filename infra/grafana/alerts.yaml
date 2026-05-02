@@ -1,0 +1,63 @@
+# Prometheus/Mimir-compatible rule groups. Import into Grafana Cloud alerting
+# or apply with your Mimir ruler pipeline.
+groups:
+  - name: shop-red
+    interval: 30s
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(shop_http_request_duration_seconds_count{status_code=~"5.."}[5m]))
+            /
+          sum(rate(shop_http_request_duration_seconds_count[5m])) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: HTTP 5xx rate above 1%
+          description: >-
+            More than 1% of measured HTTP requests returned 5xx over 5m
+            (shop_http_request_duration_seconds histogram).
+
+      - alert: HighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (rate(shop_http_request_duration_seconds_bucket[10m]))
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Global p95 HTTP latency above 500ms
+          description: >-
+            p95 of shop_http_request_duration_seconds exceeds 500ms for 10 minutes.
+            Refine with per-service labels once `job` or `service` labels are present on scrape.
+
+  - name: shop-kube
+    interval: 30s
+    rules:
+      # Requires kube-state-metrics (or similar) scraped into Mimir.
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total{namespace="shop"}[15m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Pod restarts climbing in namespace shop
+          description: >-
+            Container restart counter increased by more than 3 in 15m.
+            If this never fires, ensure kube-state-metrics is scraped.
+
+  - name: shop-business
+    interval: 30s
+    rules:
+      - alert: KafkaConsumerLag
+        expr: kafka_consumer_lag_seconds > 30
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Kafka checkout message age high at consumption
+          description: >-
+            kafka_consumer_lag_seconds (message timestamp vs processing start) > 30s.
+            Tune threshold if checkout traffic is bursty.

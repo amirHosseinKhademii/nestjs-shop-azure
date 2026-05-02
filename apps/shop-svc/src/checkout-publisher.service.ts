@@ -3,6 +3,7 @@ import { HttpService } from '@nestjs/axios';
 import { ServiceBusClient } from '@azure/service-bus';
 import type { Producer } from 'kafkajs';
 import { firstValueFrom } from 'rxjs';
+import { checkoutPublishedTotal } from '@shop/observability';
 import { buildKafkaClient } from '@shop/shared';
 
 export type CheckoutBody = {
@@ -47,34 +48,48 @@ export class CheckoutPublisherService implements OnModuleInit, OnModuleDestroy {
   async publishCheckout(body: CheckoutBody) {
     const transport = (process.env.CHECKOUT_TRANSPORT ?? 'auto') as Transport;
 
-    if (transport === 'http') {
+    try {
+      if (transport === 'http') {
+        await this.forwardHttp(body);
+        checkoutPublishedTotal.inc({ transport: 'http', result: 'success' });
+        return { channel: 'http' as const };
+      }
+
+      if (transport === 'servicebus') {
+        if (!this.sb) throw new Error('SERVICEBUS_CONNECTION_STRING required');
+        await this.forwardBus(body);
+        checkoutPublishedTotal.inc({ transport: 'servicebus', result: 'success' });
+        return { channel: 'servicebus' as const };
+      }
+
+      if (transport === 'kafka') {
+        if (!this.kafkaProducer) throw new Error('KAFKA_BROKERS required');
+        await this.forwardKafka(body);
+        checkoutPublishedTotal.inc({ transport: 'kafka', result: 'success' });
+        return { channel: 'kafka' as const };
+      }
+
+      // auto: prefer Kafka, then Service Bus, then HTTP fallback.
+      if (this.kafkaReady) {
+        await this.forwardKafka(body);
+        checkoutPublishedTotal.inc({ transport: 'kafka', result: 'success' });
+        return { channel: 'kafka' as const };
+      }
+      if (this.sb) {
+        await this.forwardBus(body);
+        checkoutPublishedTotal.inc({ transport: 'servicebus', result: 'success' });
+        return { channel: 'servicebus' as const };
+      }
       await this.forwardHttp(body);
+      checkoutPublishedTotal.inc({ transport: 'http', result: 'success' });
       return { channel: 'http' as const };
+    } catch (e) {
+      checkoutPublishedTotal.inc({
+        transport: transport === 'auto' ? 'auto' : transport,
+        result: 'error',
+      });
+      throw e;
     }
-
-    if (transport === 'servicebus') {
-      if (!this.sb) throw new Error('SERVICEBUS_CONNECTION_STRING required');
-      await this.forwardBus(body);
-      return { channel: 'servicebus' as const };
-    }
-
-    if (transport === 'kafka') {
-      if (!this.kafkaProducer) throw new Error('KAFKA_BROKERS required');
-      await this.forwardKafka(body);
-      return { channel: 'kafka' as const };
-    }
-
-    // auto: prefer Kafka, then Service Bus, then HTTP fallback.
-    if (this.kafkaReady) {
-      await this.forwardKafka(body);
-      return { channel: 'kafka' as const };
-    }
-    if (this.sb) {
-      await this.forwardBus(body);
-      return { channel: 'servicebus' as const };
-    }
-    await this.forwardHttp(body);
-    return { channel: 'http' as const };
   }
 
   private async forwardKafka(body: CheckoutBody) {

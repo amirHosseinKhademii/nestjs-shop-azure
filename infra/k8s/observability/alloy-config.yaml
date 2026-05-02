@@ -1,0 +1,155 @@
+# Grafana Alloy River config. Values in `grafana-cloud-credentials` Secret are
+# injected as env vars on the DaemonSet (see alloy.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alloy-config
+  namespace: observability
+  labels:
+    app: alloy
+data:
+  config.alloy: |
+    logging {
+      level  = "info"
+      format = "logfmt"
+    }
+
+    // ── Discovery: pods in `shop` (metrics + logs) ─────────────────────────
+    discovery.kubernetes "shop_pods" {
+      role = "pod"
+      namespaces {
+        names = ["shop"]
+      }
+    }
+
+    // Keep pods annotated for Prometheus scraping.
+    discovery.relabel "shop_prom_targets" {
+      targets = discovery.kubernetes.shop_pods.targets
+
+      rule {
+        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+        regex         = "true"
+        action        = "keep"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_ip", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+        separator     = ";"
+        regex         = "(^[^;]+);(\\d+)"
+        replacement   = "${1}:${2}"
+        target_label  = "__address__"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+        regex         = "(.+)"
+        target_label  = "__metrics_path__"
+        replacement   = "${1}"
+      }
+    }
+
+    prometheus.relabel "drop_remote_write_cardinality" {
+      forward_to = [prometheus.remote_write.mimir.receiver]
+
+      rule {
+        source_labels = ["__name__"]
+        regex         = "apiserver_request_duration_seconds_bucket|storage_operation_duration_seconds_bucket|container_tasks_state|kubelet_runtime_operations_total"
+        action        = "drop"
+      }
+    }
+
+    prometheus.remote_write "mimir" {
+      endpoint {
+        url = sys.env("MIMIR_REMOTE_WRITE_URL")
+        basic_auth {
+          username = sys.env("MIMIR_USER")
+          password = sys.env("MIMIR_API_KEY")
+        }
+      }
+    }
+
+    prometheus.scrape "shop_services" {
+      targets         = discovery.relabel.shop_prom_targets.output
+      scrape_interval = "30s"
+      forward_to      = [prometheus.relabel.drop_remote_write_cardinality.receiver]
+    }
+
+    // ── Node / host metrics (unix exporter) ────────────────────────────────
+    prometheus.exporter.unix "node" {
+      procfs_path = "/host/proc"
+      sysfs_path  = "/host/sys"
+      rootfs_path = "/host/root"
+      disable_collectors = ["wifi", "nfs", "infiniband", "ipvs", "zfs", "xfs"]
+    }
+
+    prometheus.scrape "unix" {
+      targets    = prometheus.exporter.unix.node.targets
+      scrape_interval = "30s"
+      forward_to = [prometheus.relabel.drop_remote_write_cardinality.receiver]
+    }
+
+    // ── Logs → Grafana Cloud Loki ───────────────────────────────────────────
+    loki.source.kubernetes "shop_logs" {
+      targets    = discovery.kubernetes.shop_pods.targets
+      forward_to = [loki.write.grafana.receiver]
+    }
+
+    loki.write "grafana" {
+      endpoint {
+        url = sys.env("LOKI_URL")
+        basic_auth {
+          username = sys.env("LOKI_USER")
+          password = sys.env("LOKI_API_KEY")
+        }
+      }
+    }
+
+    // ── Traces: OTLP in → tail sample → Tempo ───────────────────────────────
+    otelcol.auth.basic "tempo_auth" {
+      username = sys.env("TEMPO_USER")
+      password = sys.env("TEMPO_API_KEY")
+    }
+
+    otelcol.receiver.otlp "ingest" {
+      grpc {
+        endpoint = "0.0.0.0:4317"
+      }
+      http {
+        endpoint = "0.0.0.0:4318"
+      }
+      output {
+        traces = [otelcol.processor.tail_sampling.traces_tail.input]
+      }
+    }
+
+    otelcol.processor.tail_sampling "traces_tail" {
+      decision_wait = "5s"
+      policy {
+        name = "sample-10pct"
+        type = "probabilistic"
+        probabilistic {
+          sampling_percentage = 10
+        }
+      }
+      policy {
+        name = "keep-errors"
+        type = "status_code"
+        status_code {
+          status_codes = ["ERROR"]
+        }
+      }
+      output {
+        traces = [otelcol.processor.batch.traces_batch.input]
+      }
+    }
+
+    otelcol.processor.batch "traces_batch" {
+      output {
+        traces = [otelcol.exporter.otlphttp.tempo.input]
+      }
+    }
+
+    otelcol.exporter.otlphttp "tempo" {
+      client {
+        endpoint = sys.env("TEMPO_OTLP_URL")
+        auth     = otelcol.auth.basic.tempo_auth.handler
+      }
+    }
