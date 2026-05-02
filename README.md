@@ -13,7 +13,10 @@ Portfolio demo: React + NestJS microservices on Azure patterns — gateway (Grap
 ## Documentation
 
 - **[PLAN.md](./PLAN.md)** — architecture blueprint and implementation order.
-- **[docs/observability.md](./docs/observability.md)** — Grafana Cloud LGTM stack (Alloy, Mimir, Loki, Tempo, Faro), labels, runbook.
+- **[docs/observability-roadmap.md](./docs/observability-roadmap.md)** — **start here for observability.** End-to-end roadmap (10 phases) for adding Grafana Cloud + Prometheus from scratch: app instrumentation, Alloy DaemonSet, credentials, queries, dashboards, alerts, and every pitfall we hit.
+- **[docs/observability.md](./docs/observability.md)** — architecture diagram, label conventions, runbook snippets.
+- **[docs/grafana-cloud-bootstrap.md](./docs/grafana-cloud-bootstrap.md)** — quick reference for the `.env` keys.
+- **[infra/k8s/observability/README.md](./infra/k8s/observability/README.md)** — Alloy operator cheat sheet (kubectl commands, common errors).
 - **[infra/azure/aks-overlay/azure-guide.md](./infra/azure/aks-overlay/azure-guide.md)** — first-time Azure → AKS deploy walkthrough (account → cluster → CD → live URL → teardown).
 
 ## Quick start (local)
