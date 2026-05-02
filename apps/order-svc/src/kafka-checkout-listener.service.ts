@@ -1,9 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import type { Consumer } from 'kafkajs';
-import {
-  kafkaConsumerLagSeconds,
-  orderCheckoutHandleSeconds,
-} from '@shop/observability';
+import { kafkaConsumerLagSeconds, orderCheckoutHandleSeconds } from '@shop/observability';
 import { buildKafkaClient } from '@shop/shared';
 import { OrderService } from './order.service';
 import type { CheckoutPayload } from './order.service';

@@ -54,8 +54,7 @@ export class ObservabilityModule {
    * @returns A global dynamic module safe to import in `AppModule` exactly once.
    */
   static forRoot(_opts: ObservabilityModuleOptions): DynamicModule {
-    const usePino =
-      process.env.LOG_FORMAT === 'json' || process.env.OBS_ENABLED === 'true';
+    const usePino = process.env.LOG_FORMAT === 'json' || process.env.OBS_ENABLED === 'true';
 
     return {
       module: ObservabilityModule,

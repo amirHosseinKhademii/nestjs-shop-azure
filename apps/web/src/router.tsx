@@ -41,7 +41,5 @@ export function createAppRouter() {
     },
   ]);
 
-  return getInternalFaroFromGlobalObject()
-    ? withFaroRouterInstrumentation(router)
-    : router;
+  return getInternalFaroFromGlobalObject() ? withFaroRouterInstrumentation(router) : router;
 }
