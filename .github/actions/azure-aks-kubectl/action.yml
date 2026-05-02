@@ -1,0 +1,52 @@
+name: Configure Azure + kubectl for AKS
+description: >
+  Federated OIDC login to Azure (no client secret), then point kubectl at the
+  configured AKS cluster and verify access by listing nodes. Used by every CD
+  job that needs to talk to the cluster. Mirrors the AWS twin in
+  ../aws-eks-kubectl/action.yml so the two clouds stay symmetrical.
+
+inputs:
+  client-id:
+    required: true
+    description: AZURE_CLIENT_ID (App Registration / SP) federated against this repo.
+  tenant-id:
+    required: true
+    description: Microsoft Entra tenant ID the SP lives in.
+  subscription-id:
+    required: true
+    description: Subscription the AKS cluster is in.
+  resource-group:
+    required: true
+    description: Resource group containing the AKS cluster (e.g. shop-demo-rg).
+  cluster:
+    required: true
+    description: AKS cluster name (e.g. shop-demo).
+
+outputs:
+  cluster-context:
+    description: kubectl current-context after configuration (handy for logs).
+    value: ${{ steps.kube.outputs.context }}
+
+runs:
+  using: composite
+  steps:
+    - name: Azure login (federated, no secret)
+      uses: azure/login@v2
+      with:
+        client-id: ${{ inputs.client-id }}
+        tenant-id: ${{ inputs.tenant-id }}
+        subscription-id: ${{ inputs.subscription-id }}
+
+    - name: Get AKS kubeconfig + verify cluster access
+      id: kube
+      shell: bash
+      run: |
+        set -euo pipefail
+        az aks get-credentials \
+          --resource-group "${{ inputs.resource-group }}" \
+          --name "${{ inputs.cluster }}" \
+          --overwrite-existing
+        CTX=$(kubectl config current-context)
+        echo "context=$CTX" >> "$GITHUB_OUTPUT"
+        kubectl version --client=true
+        kubectl get nodes -o wide

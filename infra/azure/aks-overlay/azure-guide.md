@@ -6,7 +6,7 @@ to Azure" to "my browser is showing the deployed app" — with proper
 secrets, network isolation, and a CI/CD pipeline.
 
 This is the Azure mirror of the AWS walkthrough in
-[`infra/aws/eks-overlay/Readme.md`](./infra/aws/eks-overlay/Readme.md).
+[`infra/aws/eks-overlay/Readme.md`](../../aws/eks-overlay/Readme.md).
 Same topology, same security model, same `kubectl apply -k` flow — only
 the cloud-specific bits change.
 
@@ -46,7 +46,7 @@ public IP + LB rules). Cluster shutdown = $0. Teardown is one
 > **Prefer infrastructure-as-code?** Phases 3 + 6 (resource group,
 > AKS cluster, App Registration, federated credentials, RBAC) — and
 > optionally Phase 9 (Key Vault) — are also available as Terraform in
-> [`infra/azure/terraform/`](./infra/azure/terraform/). Run
+> [`infra/azure/terraform/`](../terraform/). Run
 > `terraform apply` there instead of the `az` commands in those phases.
 
 ### Roadmap
@@ -390,129 +390,37 @@ EOF
 > identifier — only the federated trust + RBAC assignments make it
 > *useful*), but storing it as a Secret keeps it out of forks.
 
-### 6.5 Add the AKS jobs to `.github/workflows/cd.yml`
+### 6.5 The AKS jobs in `.github/workflows/cd.yml` (already there)
 
-The existing CD pipeline ships with `seed-secrets` and `deploy` jobs
-gated on `vars.EKS_CLUSTER_NAME`. Add the Azure twins right after them
-— they auto-skip whenever `vars.AKS_CLUSTER_NAME` is unset, so the
-pipeline stays green for AWS-only users.
+The CD pipeline already ships with the `seed-secrets-aks` and
+`deploy-aks` jobs you need — both gated on `vars.AKS_CLUSTER_NAME` so
+they auto-skip when the variable is unset (keeps the workflow green
+for EKS-only / image-only contributors).
 
-```yaml
-# ─── 5. Seed shop-app-secrets in AKS from GH Secrets ─────────────────────
-seed-secrets-aks:
-  name: Seed cluster secrets (AKS)
-  needs: update-manifests
-  if: vars.AKS_CLUSTER_NAME != ''
-  runs-on: ubuntu-24.04
-  timeout-minutes: 10
-  permissions:
-    id-token: write    # Federated OIDC -> Azure
-    contents: read
-  steps:
-    - uses: actions/checkout@v6
-      with: { ref: main, fetch-depth: 1 }
+The full job graph after `update-manifests`:
 
-    - name: Validate required Secrets
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        MONGO_URI:    ${{ secrets.MONGO_URI }}
-        REDIS_URL:    ${{ secrets.REDIS_URL }}
-        JWT_SECRET:   ${{ secrets.JWT_SECRET }}
-      run: |
-        set -euo pipefail
-        for v in DATABASE_URL MONGO_URI REDIS_URL JWT_SECRET; do
-          [ -n "${!v}" ] || { echo "::error::Missing $v"; exit 1; }
-        done
-
-    - name: Azure login (federated)
-      uses: azure/login@v2
-      with:
-        client-id:       ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id:       ${{ vars.AZURE_TENANT_ID }}
-        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-    - name: Get AKS kubeconfig
-      run: |
-        az aks get-credentials \
-          --resource-group "${{ vars.AKS_RESOURCE_GROUP }}" \
-          --name "${{ vars.AKS_CLUSTER_NAME }}" \
-          --overwrite-existing
-        kubectl get nodes -o wide
-
-    - name: Ensure shop namespace
-      run: kubectl apply -f infra/k8s/namespace.yaml
-
-    - name: Apply shop-app-secrets (idempotent)
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        MONGO_URI:    ${{ secrets.MONGO_URI }}
-        REDIS_URL:    ${{ secrets.REDIS_URL }}
-        JWT_SECRET:   ${{ secrets.JWT_SECRET }}
-      run: |
-        kubectl create secret generic shop-app-secrets -n shop \
-          --from-literal=DATABASE_URL="$DATABASE_URL" \
-          --from-literal=MONGO_URI="$MONGO_URI" \
-          --from-literal=REDIS_URL="$REDIS_URL" \
-          --from-literal=JWT_SECRET="$JWT_SECRET" \
-          --dry-run=client -o yaml | kubectl apply -f -
-
-# ─── 6. Apply the AKS overlay + wait for rollout ─────────────────────────
-deploy-aks:
-  name: Deploy to AKS
-  needs: [update-manifests, seed-secrets-aks]
-  if: vars.AKS_CLUSTER_NAME != ''
-  runs-on: ubuntu-24.04
-  timeout-minutes: 15
-  permissions:
-    id-token: write
-    contents: read
-  environment:
-    name: production-aks
-    url: ${{ steps.url.outputs.app_url }}
-  steps:
-    - uses: actions/checkout@v6
-      with:
-        ref: ${{ needs.update-manifests.outputs.bumped_sha || 'main' }}
-        fetch-depth: 1
-
-    - name: Azure login (federated)
-      uses: azure/login@v2
-      with:
-        client-id:       ${{ secrets.AZURE_CLIENT_ID }}
-        tenant-id:       ${{ vars.AZURE_TENANT_ID }}
-        subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
-
-    - name: Get AKS kubeconfig
-      run: |
-        az aks get-credentials \
-          --resource-group "${{ vars.AKS_RESOURCE_GROUP }}" \
-          --name "${{ vars.AKS_CLUSTER_NAME }}" \
-          --overwrite-existing
-
-    - name: Apply AKS overlay
-      run: kubectl apply -k infra/azure/aks-overlay/
-
-    - name: Wait for rollout
-      run: |
-        set -euo pipefail
-        for d in api-gateway web user-svc shop-svc order-svc; do
-          kubectl -n shop rollout status "deployment/$d" --timeout=5m
-        done
-
-    - name: Resolve public URL
-      id: url
-      run: |
-        IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
-               -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-        URL="http://$IP.nip.io"
-        echo "app_url=$URL" >> "$GITHUB_OUTPUT"
-        echo "## Live URL" >> "$GITHUB_STEP_SUMMARY"
-        echo "[$URL]($URL)" >> "$GITHUB_STEP_SUMMARY"
+```
+                                       ┌─► seed-secrets     ─► deploy      (EKS)
+docker (matrix×5) ─► update-manifests ─┤
+                                       └─► seed-secrets-aks ─► deploy-aks  (AKS)
 ```
 
-Commit the change, push to `main` — that single push triggers
-`docker → update-manifests → seed-secrets-aks → deploy-aks` and the
-pipeline puts the live URL on the run page.
+Set the GitHub Variables and Secrets you collected in 6.4, push to
+`main`, and the AKS branch lights up automatically. The
+`deploy-aks` job posts a clickable `http://<azure-public-ip>.nip.io`
+URL to its run summary via the **`production-aks`** GitHub Environment.
+
+Both jobs reuse the composite action at
+[`.github/actions/azure-aks-kubectl/`](../../../.github/actions/azure-aks-kubectl/action.yml)
+which does `azure/login@v2` (federated, no secret) +
+`az aks get-credentials` + `kubectl get nodes` verification. Symmetrical
+to the AWS twin at
+[`.github/actions/aws-eks-kubectl/`](../../../.github/actions/aws-eks-kubectl/action.yml).
+
+> Want to peek at the exact YAML? Open
+> [`.github/workflows/cd.yml`](../../../.github/workflows/cd.yml)
+> and look for the `seed-secrets-aks` + `deploy-aks` jobs near the
+> bottom of the file.
 
 ### 6.6 Create the GitHub Environment
 
@@ -640,7 +548,7 @@ expand secret variables into env vars unless you do it explicitly:
     JWT_SECRET: $(JWT_SECRET)        # ← required, otherwise $JWT_SECRET = ""
 ```
 
-This pipeline ([`azure-pipelines-cd.yml`](./azure-pipelines-cd.yml))
+This pipeline ([`azure-pipelines-cd.yml`](../../../azure-pipelines-cd.yml))
 already does that correctly.
 
 #### GitHub OIDC vs ADO Service Connection — when to use which
@@ -1176,15 +1084,16 @@ the same Standard LB.
 
 | Piece | File | Purpose |
 | --- | --- | --- |
-| Production base manifests | [`infra/k8s/`](./infra/k8s/) | Real-prod manifests (TLS, host rule, cert-manager) |
-| AKS overlay | [`infra/azure/aks-overlay/`](./infra/azure/aks-overlay/) | Drops TLS / cert-manager / host so the raw LB IP works |
-| AKS overlay README | [`infra/azure/aks-overlay/Readme.md`](./infra/azure/aks-overlay/Readme.md) | Quick reference (assumes you've read this guide) |
-| **AKS Terraform** | [`infra/azure/terraform/`](./infra/azure/terraform/) | IaC alternative to the `az` commands in Phases 3 + 6 |
-| EKS overlay (AWS twin) | [`infra/aws/eks-overlay/`](./infra/aws/eks-overlay/) | Same pattern for AWS |
-| GitHub Actions CI | [`.github/workflows/ci.yml`](./.github/workflows/ci.yml) | Lint / typecheck / test / build |
-| GitHub Actions CD | [`.github/workflows/cd.yml`](./.github/workflows/cd.yml) | docker → bump → seed-secrets → deploy (add the AKS jobs from Phase 6.5) |
-| Azure DevOps CD | [`azure-pipelines-cd.yml`](./azure-pipelines-cd.yml) | Equivalent pipeline if you'd rather use ADO (auth model in Phase 6.7) |
-| Load-balancing deep dive | [`infra/k8s/README.md`](./infra/k8s/README.md#load-balancing--whats-actually-happening-between-the-browser-and-a-pod) | How traffic flows from the browser to a Pod (3 LB layers explained) |
+| Production base manifests | [`infra/k8s/`](../../k8s/) | Real-prod manifests (TLS, host rule, cert-manager) |
+| AKS overlay | [`infra/azure/aks-overlay/`](./) | Drops TLS / cert-manager / host so the raw LB IP works |
+| AKS overlay README | [`infra/azure/aks-overlay/Readme.md`](./Readme.md) | Quick reference (assumes you've read this guide) |
+| **AKS Terraform** | [`infra/azure/terraform/`](../terraform/) | IaC alternative to the `az` commands in Phases 3 + 6 |
+| EKS overlay (AWS twin) | [`infra/aws/eks-overlay/`](../../aws/eks-overlay/) | Same pattern for AWS |
+| GitHub Actions CI | [`.github/workflows/ci.yml`](../../../.github/workflows/ci.yml) | Lint / typecheck / test / build |
+| GitHub Actions CD | [`.github/workflows/cd.yml`](../../../.github/workflows/cd.yml) | docker → bump → {seed-secrets, seed-secrets-aks} → {deploy, deploy-aks} — AKS jobs already wired |
+| Azure-AKS composite action | [`.github/actions/azure-aks-kubectl/`](../../../.github/actions/azure-aks-kubectl/action.yml) | Federated `azure/login@v2` + `az aks get-credentials`, reused by both AKS jobs |
+| Azure DevOps CD | [`azure-pipelines-cd.yml`](../../../azure-pipelines-cd.yml) | Equivalent pipeline if you'd rather use ADO (auth model in Phase 6.7) |
+| Load-balancing deep dive | [`infra/k8s/README.md`](../../k8s/README.md#load-balancing--whats-actually-happening-between-the-browser-and-a-pod) | How traffic flows from the browser to a Pod (3 LB layers explained) |
 | Secret-flow deep dive | [Phase 9.7 in this file](#97-the-full-secret-journey-explained-end-to-end) | How secrets travel from Key Vault → Pod env vars (Docker / K8s / app, end-to-end) |
 
 ---

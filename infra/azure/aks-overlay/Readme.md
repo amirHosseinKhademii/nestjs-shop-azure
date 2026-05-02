@@ -4,7 +4,7 @@ The Azure equivalent of [`infra/aws/eks-overlay/`](../../aws/eks-overlay/Readme.
 Same topology, same security model, same `kubectl apply -k` workflow —
 only the cloud-specific bits change.
 
-> **First time on Azure?** Read [`azure-guide.md`](../../../azure-guide.md)
+> **First time on Azure?** Read [`azure-guide.md`](./azure-guide.md)
 > at the repo root first. It walks from "I just signed up to Azure" all
 > the way to a live URL, including the GitHub Actions wiring this
 > overlay assumes is already in place.
@@ -191,13 +191,12 @@ In GitHub → Settings → Secrets and variables → Actions, add:
 | Secret | `MONGO_URI` | Atlas |
 | Secret | `REDIS_URL` | Upstash |
 
-> The GH Actions side does NOT have an AKS deploy job today — only the
-> EKS one. To wire it up, copy `seed-secrets` + `deploy-eks` from
-> [`.github/workflows/cd.yml`](../../../.github/workflows/cd.yml),
-> swap `aws-actions/configure-aws-credentials@v4` for
-> `azure/login@v2` (with `client-id`/`tenant-id`/`subscription-id`),
-> and swap `aws eks update-kubeconfig` for
-> `az aks get-credentials -g $AKS_RESOURCE_GROUP -n $AKS_CLUSTER_NAME`.
+> The GH Actions CD pipeline ([`.github/workflows/cd.yml`](../../../.github/workflows/cd.yml))
+> already includes `seed-secrets-aks` and `deploy-aks` jobs that consume
+> these variables. They auto-skip when `vars.AKS_CLUSTER_NAME` is unset
+> (same gating pattern as the EKS jobs and the Azure DevOps `SeedSecrets`
+> + `Deploy` stages below). The cluster credentials live in the reusable
+> composite action [`.github/actions/azure-aks-kubectl`](../../../.github/actions/azure-aks-kubectl/action.yml).
 
 ### 5b. CI auth — Azure DevOps → AKS (Service Connection)
 
@@ -263,9 +262,29 @@ azure-pipelines-cd.yml
 
 ### GitHub Actions flow (Azure-targeted)
 
-Identical job graph as the EKS pipeline, but with `azure/login@v2`
-instead of `aws-actions/configure-aws-credentials@v4`. See note in
-section 5a above.
+```
+push to main
+   │
+   ▼
+.github/workflows/ci.yml (format / verify / build)
+   │  on success → workflow_run trigger
+   ▼
+.github/workflows/cd.yml
+   ├── docker            push images tagged sha-<7> + latest
+   ├── update-manifests  kustomize edit set image …:sha-<…> + commit
+   │
+   │   ┌─► seed-secrets     ─► deploy      (EKS, gated on vars.EKS_CLUSTER_NAME)
+   └───┤
+       └─► seed-secrets-aks ─► deploy-aks  (AKS, gated on vars.AKS_CLUSTER_NAME)
+                              + production-aks Environment
+                              + posts http://<azure-public-ip>.nip.io to summary
+```
+
+Both branches use the reusable composite at
+[`.github/actions/azure-aks-kubectl`](../../../.github/actions/azure-aks-kubectl/action.yml)
+for federated `azure/login@v2` + `az aks get-credentials`. Symmetrical
+to the AWS twin at
+[`.github/actions/aws-eks-kubectl`](../../../.github/actions/aws-eks-kubectl/action.yml).
 
 ---
 

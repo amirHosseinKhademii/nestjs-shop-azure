@@ -44,8 +44,11 @@ spec:
               value: production
             - name: ORDER_SVC_URL
               value: http://order-svc:3003
+            # `auto` picks the first available: Kafka (KAFKA_BROKERS) →
+            # Service Bus (SERVICEBUS_CONNECTION_STRING) → HTTP fallback.
+            # Kafka & Service Bus credentials, if any, come from `shop-app-secrets`.
             - name: CHECKOUT_TRANSPORT
-              value: http
+              value: auto
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

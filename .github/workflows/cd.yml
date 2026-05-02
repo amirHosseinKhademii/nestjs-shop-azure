@@ -1,12 +1,15 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  CD — docker → update-manifests → seed-secrets → deploy
+#  CD — docker → update-manifests → {seed-secrets, seed-secrets-aks}
+#                                 → {deploy,       deploy-aks}
 #
 #  Triggered automatically after CI passes on `main` or a `v*.*.*` tag, or
 #  manually via "Run workflow" (workflow_dispatch).
 #
-#  Job graph (linear so the run page reads top-to-bottom):
+#  Job graph (the two cloud branches run in parallel after the bump):
 #
-#    docker (matrix × 5) ──► update-manifests ──► seed-secrets ──► deploy
+#                                            ┌─► seed-secrets     ─► deploy      (EKS)
+#    docker (matrix×5) ─► update-manifests ──┤
+#                                            └─► seed-secrets-aks ─► deploy-aks  (AKS)
 #
 #  Notes for anyone editing this file:
 #    • Workflow-level `permissions: contents: read` — every job opts INTO any
@@ -15,12 +18,16 @@
 #      We tried a centralized `prepare` job that exposed those as outputs;
 #      `needs.prepare.outputs.namespace` came back empty in the docker job
 #      for reasons we couldn't pin down on this repo, so we reverted.
-#    • `seed-secrets` and `deploy` auto-skip when `vars.EKS_CLUSTER_NAME` is
-#      unset, so the workflow stays green for users who only consume images.
-#    • `deploy` uses a **GitHub Environment** (`production-eks`) which gives
-#      you a clickable URL on the run page + a Deployments timeline under
-#      Settings → Environments + an obvious place to attach approval rules
-#      when this leaves demo territory.
+#    • EKS branch (`seed-secrets`, `deploy`)         auto-skips when
+#      `vars.EKS_CLUSTER_NAME` is unset.
+#    • AKS branch (`seed-secrets-aks`, `deploy-aks`) auto-skips when
+#      `vars.AKS_CLUSTER_NAME` is unset.
+#      Both unset = workflow finishes after `update-manifests`, perfect for
+#      contributors who only consume images.
+#    • `deploy` / `deploy-aks` use a GitHub Environment (`production-eks` /
+#      `production-aks`) which gives you a clickable URL on the run page +
+#      a Deployments timeline under Settings → Environments + an obvious
+#      place to attach approval rules when this leaves demo territory.
 # ─────────────────────────────────────────────────────────────────────────────
 name: CD
 
@@ -300,14 +307,36 @@ jobs:
           MONGO_URI: ${{ secrets.MONGO_URI }}
           REDIS_URL: ${{ secrets.REDIS_URL }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          # Optional broker creds — kept out of the required-set check above so
+          # users without these stays green. We pass them through only when set.
+          SERVICEBUS_CONNECTION_STRING: ${{ secrets.SERVICEBUS_CONNECTION_STRING }}
+          KAFKA_BROKERS: ${{ secrets.KAFKA_BROKERS }}
+          KAFKA_USERNAME: ${{ secrets.KAFKA_USERNAME }}
+          KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
+          KAFKA_SSL_CA: ${{ secrets.KAFKA_SSL_CA }}
+          KAFKA_SSL_CERT: ${{ secrets.KAFKA_SSL_CERT }}
+          KAFKA_SSL_KEY: ${{ secrets.KAFKA_SSL_KEY }}
+          KAFKA_TOPIC: ${{ secrets.KAFKA_TOPIC }}
+          KAFKA_GROUP_ID: ${{ secrets.KAFKA_GROUP_ID }}
         run: |
           set -euo pipefail
+          args=(
+            --from-literal=DATABASE_URL="$DATABASE_URL"
+            --from-literal=MONGO_URI="$MONGO_URI"
+            --from-literal=REDIS_URL="$REDIS_URL"
+            --from-literal=JWT_SECRET="$JWT_SECRET"
+          )
+          for v in SERVICEBUS_CONNECTION_STRING \
+                   KAFKA_BROKERS KAFKA_USERNAME KAFKA_PASSWORD \
+                   KAFKA_SSL_CA KAFKA_SSL_CERT KAFKA_SSL_KEY \
+                   KAFKA_TOPIC KAFKA_GROUP_ID; do
+            if [ -n "${!v:-}" ]; then
+              args+=(--from-literal="${v}=${!v}")
+            fi
+          done
           kubectl create secret generic shop-app-secrets \
             --namespace shop \
-            --from-literal=DATABASE_URL="$DATABASE_URL" \
-            --from-literal=MONGO_URI="$MONGO_URI" \
-            --from-literal=REDIS_URL="$REDIS_URL" \
-            --from-literal=JWT_SECRET="$JWT_SECRET" \
+            "${args[@]}" \
             --dry-run=client -o yaml | kubectl apply -f -
 
       - name: Job summary
@@ -397,6 +426,204 @@ jobs:
           echo "app_url=$URL" >> "$GITHUB_OUTPUT"
           {
             echo "## Live URL"
+            echo ""
+            echo "[$URL]($URL)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ─── 5. Seed shop-app-secrets in AKS from GH Secrets ─────────────────────
+  #
+  # Twin of `seed-secrets` above, but talks to AKS via federated Azure login
+  # instead of AWS STS. Auto-skips whenever vars.AKS_CLUSTER_NAME is unset
+  # so EKS-only / image-only consumers see no failures.
+  seed-secrets-aks:
+    name: Seed cluster secrets (AKS)
+    needs: update-manifests
+    if: vars.AKS_CLUSTER_NAME != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      id-token: write     # federated OIDC -> Azure
+      contents: read
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+          fetch-depth: 1
+
+      - name: Validate required Secrets + Variables are set
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          AKS_RESOURCE_GROUP: ${{ vars.AKS_RESOURCE_GROUP }}
+          AKS_CLUSTER_NAME: ${{ vars.AKS_CLUSTER_NAME }}
+        run: |
+          set -euo pipefail
+          missing_secrets=()
+          for v in AZURE_CLIENT_ID DATABASE_URL MONGO_URI REDIS_URL JWT_SECRET; do
+            [ -n "${!v:-}" ] || missing_secrets+=("$v")
+          done
+          missing_vars=()
+          for v in AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID AKS_RESOURCE_GROUP AKS_CLUSTER_NAME; do
+            [ -n "${!v:-}" ] || missing_vars+=("$v")
+          done
+          if [ ${#missing_secrets[@]} -ne 0 ] || [ ${#missing_vars[@]} -ne 0 ]; then
+            [ ${#missing_secrets[@]} -ne 0 ] && \
+              echo "::error::Missing required Secrets: ${missing_secrets[*]}"
+            [ ${#missing_vars[@]} -ne 0 ] && \
+              echo "::error::Missing required Variables: ${missing_vars[*]}"
+            echo "::error::Configure them in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "All required Secrets and Variables present."
+
+      - name: Configure Azure + kubectl
+        uses: ./.github/actions/azure-aks-kubectl
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
+          cluster: ${{ vars.AKS_CLUSTER_NAME }}
+
+      - name: Ensure shop namespace exists
+        run: kubectl apply -f infra/k8s/namespace.yaml
+
+      - name: Apply shop-app-secrets (idempotent)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          REDIS_URL: ${{ secrets.REDIS_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          # Optional broker creds — kept out of the required-set check above so
+          # users without these stays green. We pass them through only when set.
+          SERVICEBUS_CONNECTION_STRING: ${{ secrets.SERVICEBUS_CONNECTION_STRING }}
+          KAFKA_BROKERS: ${{ secrets.KAFKA_BROKERS }}
+          KAFKA_USERNAME: ${{ secrets.KAFKA_USERNAME }}
+          KAFKA_PASSWORD: ${{ secrets.KAFKA_PASSWORD }}
+          KAFKA_SSL_CA: ${{ secrets.KAFKA_SSL_CA }}
+          KAFKA_SSL_CERT: ${{ secrets.KAFKA_SSL_CERT }}
+          KAFKA_SSL_KEY: ${{ secrets.KAFKA_SSL_KEY }}
+          KAFKA_TOPIC: ${{ secrets.KAFKA_TOPIC }}
+          KAFKA_GROUP_ID: ${{ secrets.KAFKA_GROUP_ID }}
+        run: |
+          set -euo pipefail
+          args=(
+            --from-literal=DATABASE_URL="$DATABASE_URL"
+            --from-literal=MONGO_URI="$MONGO_URI"
+            --from-literal=REDIS_URL="$REDIS_URL"
+            --from-literal=JWT_SECRET="$JWT_SECRET"
+          )
+          for v in SERVICEBUS_CONNECTION_STRING \
+                   KAFKA_BROKERS KAFKA_USERNAME KAFKA_PASSWORD \
+                   KAFKA_SSL_CA KAFKA_SSL_CERT KAFKA_SSL_KEY \
+                   KAFKA_TOPIC KAFKA_GROUP_ID; do
+            if [ -n "${!v:-}" ]; then
+              args+=(--from-literal="${v}=${!v}")
+            fi
+          done
+          kubectl create secret generic shop-app-secrets \
+            --namespace shop \
+            "${args[@]}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Job summary
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ '${{ job.status }}' = 'success' ]; then
+            TS=$(kubectl -n shop get secret shop-app-secrets \
+                   -o jsonpath='{.metadata.creationTimestamp}' 2>/dev/null || echo unknown)
+            {
+              echo "## seed-secrets-aks → **success**"
+              echo ""
+              echo "\`shop-app-secrets\` confirmed in namespace \`shop\` (created **$TS**)."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "## seed-secrets-aks → **${{ job.status }}**" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  # ─── 6. Apply the AKS overlay + wait for rollout ─────────────────────────
+  #
+  # Twin of `deploy` above. Differences:
+  #   • Reads the public IP (Azure Standard LB) instead of the hostname (AWS ELB).
+  #   • Uses production-aks GitHub Environment so deploys show up under a
+  #     separate timeline (lets you attach AKS-specific reviewers).
+  deploy-aks:
+    name: Deploy to AKS
+    needs: [update-manifests, seed-secrets-aks]
+    if: vars.AKS_CLUSTER_NAME != ''
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+      contents: read
+    environment:
+      name: production-aks
+      url: ${{ steps.url.outputs.app_url }}
+    steps:
+      - name: Checkout deploy ref
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.update-manifests.outputs.bumped_sha || 'main' }}
+          fetch-depth: 1
+
+      - name: Configure Azure + kubectl
+        uses: ./.github/actions/azure-aks-kubectl
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+          resource-group: ${{ vars.AKS_RESOURCE_GROUP }}
+          cluster: ${{ vars.AKS_CLUSTER_NAME }}
+
+      - name: Apply AKS overlay (kubectl built-in kustomize)
+        run: |
+          set -euo pipefail
+          kubectl apply -k infra/azure/aks-overlay/
+
+      - name: Wait for rollout (5m per deployment)
+        run: |
+          set -euo pipefail
+          {
+            echo "## Rollout (AKS)"
+            echo ""
+            echo "| Deployment | Result |"
+            echo "| --- | --- |"
+          } >> "$GITHUB_STEP_SUMMARY"
+          fail=0
+          for d in api-gateway web user-svc shop-svc order-svc; do
+            echo "── rollout: $d ──"
+            if kubectl -n shop rollout status "deployment/$d" --timeout=5m; then
+              echo "| \`$d\` | OK |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "| \`$d\` | **FAILED** |" >> "$GITHUB_STEP_SUMMARY"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+      - name: Resolve public URL
+        id: url
+        run: |
+          set -euo pipefail
+          IP=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
+                 -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
+          if [ -z "$IP" ]; then
+            echo "::warning::ingress-nginx Azure LB has no IP yet (still provisioning?)"
+            kubectl -n ingress-nginx get svc ingress-nginx-controller
+            exit 0
+          fi
+          # nip.io gives a free hostname so browsers + ingress host rules cope.
+          URL="http://${IP}.nip.io"
+          echo "app_url=$URL" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Live URL (AKS)"
             echo ""
             echo "[$URL]($URL)"
           } >> "$GITHUB_STEP_SUMMARY"

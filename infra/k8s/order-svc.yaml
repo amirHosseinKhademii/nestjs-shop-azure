@@ -45,6 +45,10 @@ spec:
               value: 'false'
             - name: SERVICEBUS_LISTENER_ENABLED
               value: 'false'
+            # KAFKA_LISTENER_ENABLED is intentionally NOT set here — the
+            # listener auto-enables when KAFKA_BROKERS is present in
+            # shop-app-secrets (see secrets.example.yaml). Set this env to
+            # 'false' on overlays that should opt out (e.g. while migrating).
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true

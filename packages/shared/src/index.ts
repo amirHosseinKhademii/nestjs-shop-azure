@@ -16,3 +16,4 @@ export const CHECKOUT_TOPIC = 'checkout-events';
 
 export { buildPostgresTypeOrmOptions, type BuildPostgresOptions } from './typeorm';
 export { resolveServiceEnvFiles } from './env';
+export { buildKafkaClient } from './kafka';

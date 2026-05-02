@@ -11,6 +11,7 @@ import { InternalController } from './internal.controller';
 import { OrderService } from './order.service';
 import { HealthController } from './health.controller';
 import { ServiceBusListenerService } from './service-bus-listener.service';
+import { KafkaCheckoutListenerService } from './kafka-checkout-listener.service';
 
 @Module({
   imports: [
@@ -32,6 +33,6 @@ import { ServiceBusListenerService } from './service-bus-listener.service';
     TerminusModule,
   ],
   controllers: [HealthController, OrderController, InternalController],
-  providers: [OrderService, ServiceBusListenerService],
+  providers: [OrderService, ServiceBusListenerService, KafkaCheckoutListenerService],
 })
 export class AppModule {}
