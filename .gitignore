@@ -12,16 +12,14 @@ coverage
 .turbo
 *.log
 .DS_Store
-.terraform
 *.tfstate
 *.tfstate.*
-.terraform.lock.hcl
-terraform.tfvars
+
 
 # First-commit scope: only apps/user-svc is tracked; opt in other paths later.
 
-k8s-local/
-terraform/
+
+
 docker-compose.yml
 docker-compose.yml
 secrets.yaml

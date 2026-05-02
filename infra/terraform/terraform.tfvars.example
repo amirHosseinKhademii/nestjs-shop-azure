@@ -1,0 +1,34 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# terraform.tfvars.example
+#
+# TEMPLATE for the real `terraform.tfvars` file.
+#
+# Workflow:
+#   cp terraform.tfvars.example terraform.tfvars
+#   $EDITOR terraform.tfvars                  # fill in your secrets
+#   terraform plan                            # auto-loaded by Terraform
+#
+# `terraform.tfvars` is gitignored; this `.example` is checked in only as
+# documentation. Never commit real passwords or your public IP.
+#
+# Each line below sets one variable declared in variables.tf. Variables not
+# overridden here keep the `default` value from that file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Inserted into every resource name (RG, AKS, ACR, Postgres, …). Lowercase,
+# short, alphanumeric. ACR strips the dash internally.
+prefix            = "shopdemo"
+
+# Azure region. Westeurope is closest to most European latency targets and
+# has every preview feature this stack uses. Switch to `eastus` /
+# `northeurope` etc. to match your audience.
+location          = "westeurope"
+
+# Postgres admin password. REQUIRED — variables.tf has no default for this
+# (sensitive). Min 8 chars + mix of upper/lower/digit per Azure policy.
+pg_admin_password = "REPLACE_WITH_STRONG_PASSWORD"
+
+# Your laptop's public IP. terraform creates a firewall rule so user-svc
+# can connect from local dev. Get it with `curl -s ifconfig.me`. Set to ""
+# (or remove this line) if all your dev traffic comes from inside AKS.
+pg_allowed_ip     = "203.0.113.10"

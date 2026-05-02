@@ -1,0 +1,33 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Copy this file to terraform.tfvars (gitignored) and edit.
+#  `terraform.tfvars` is auto-loaded by `terraform plan|apply`.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# REQUIRED — this is the only variable with no default. Format: OWNER/REPO.
+github_repo = "amirHosseinKhademii/nestjs-shop-azure"
+
+# Optional overrides — every default already matches azure-guide.md.
+# location            = "westeurope"
+# resource_group_name = "shop-demo-rg"
+# cluster_name        = "shop-demo"
+# node_count          = 2
+# node_vm_size        = "Standard_B2s"
+
+# Add more environments / branches that should be allowed to deploy. The
+# defaults are sufficient for the guide flow (main branch + production-aks
+# environment).
+# github_environments = ["production-aks", "staging-aks"]
+# github_branches     = ["main"]
+
+# If you change the SP display name, also change ci_app_name in your CD
+# job's references.
+# ci_app_name = "github-actions-shop-cd"
+
+# Set this to true to ALSO provision Key Vault + UAMI + workload-identity
+# federation as covered in azure-guide.md Phase 9. Default is false so the
+# initial cluster bring-up stays minimal — flip on with a second
+# `terraform apply -var enable_key_vault=true` once the cluster is healthy.
+# enable_key_vault   = true
+# keyvault_name      = "shop-kv-mycompany"   # optional; auto-generated otherwise
+# app_namespace      = "shop"
+# app_service_account = "shop-app"
