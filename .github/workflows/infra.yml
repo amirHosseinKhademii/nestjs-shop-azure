@@ -1,0 +1,217 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  Infra — terraform plan on PR, terraform apply on merge
+#
+#  ⚠️  THIS WORKFLOW IS DORMANT.
+#
+#  Every step that would actually call Azure or Terraform is currently a
+#  no-op `echo`. The real `run:` lines are kept right next to them as code
+#  comments so you can see exactly what would execute. Three safety layers:
+#
+#    1. Auto-triggers (`pull_request`, `push`) are commented out below.
+#       Only `workflow_dispatch` is active, so the workflow can ONLY run if
+#       a human clicks "Run workflow" in the Actions tab.
+#    2. Each `run:` line is `echo "DORMANT — …"`. The real terraform commands
+#       sit immediately above as `# run: terraform …`.
+#    3. The `apply` job has `if: false`, so even if `plan` is run manually
+#       and succeeds, `apply` will never start.
+#
+#  ── To activate (when you're ready to put real Azure infra under CI) ──
+#    a) Set up an Azure AD App Registration with federated credentials for
+#       this repo, then add these GitHub Secrets:
+#         AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID
+#         PG_ADMIN_PASSWORD (or whatever secret your tfvars need)
+#    b) Move Terraform state to a remote backend (Azure Storage). See
+#       infra/terraform/providers.tf for the `backend "azurerm" {}` block to
+#       uncomment, plus the bootstrap commands in
+#       infra/terraform/README.md → "State backend".
+#    c) Configure a GitHub Environment named `production` with required
+#       reviewers — this gates `terraform apply` behind a manual approval.
+#    d) In this file:
+#         • Uncomment the `pull_request:` and `push:` triggers under `on:`.
+#         • Swap each `run: echo "DORMANT — would: …"` for the commented
+#           `# run: terraform …` line above it (and uncomment its
+#           `working-directory` / `env:` siblings).
+#         • Remove the `if: false` line on the `apply` job.
+#
+#  Why this exists at all while dormant: keeps the design under source
+#  control and documented so the next person (or future-you) doesn't have to
+#  rediscover the wiring. App pushes are NOT affected — `cd.yml` keeps
+#  doing its thing because the `paths:` filter (when activated) excludes
+#  everything outside `infra/terraform/**`.
+# ─────────────────────────────────────────────────────────────────────────────
+name: Infra (DORMANT)
+
+on:
+  # Manual trigger only while DORMANT — uncomment the auto-triggers when
+  # activating per the instructions in the file header.
+  workflow_dispatch:
+  # pull_request:
+  #   paths:
+  #     - 'infra/terraform/**'
+  #     - '.github/workflows/infra.yml'
+  # push:
+  #   branches: [main]
+  #   paths:
+  #     - 'infra/terraform/**'
+  #     - '.github/workflows/infra.yml'
+
+permissions:
+  contents: read
+  pull-requests: write   # so the plan job can post the diff as a PR comment
+  id-token: write        # OIDC federation to Azure (no SP password to leak)
+
+# Don't let two infra workflows race for the state lock — queue them.
+concurrency:
+  group: infra-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────
+  # plan — runs on every PR (when active), posts the terraform diff as a
+  # comment so reviewers see exactly what will change before merging.
+  # ───────────────────────────────────────────────────────────────────────
+  plan:
+    name: terraform plan
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Azure auth (OIDC) ────────────────────────────────────────────
+      # When activating, uncomment and add the three AZURE_* secrets:
+      # - uses: azure/login@v2
+      #   with:
+      #     client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      # ── terraform init ───────────────────────────────────────────────
+      # Fetches providers + configures the remote backend.
+      # When activating, swap the `echo` for the real `run:` below.
+      # - name: terraform init
+      #   run: terraform init -input=false
+      #   working-directory: infra/terraform
+      - name: terraform init (DORMANT)
+        run: |
+          echo "DORMANT - would run: terraform init -input=false (in infra/terraform)"
+
+      # ── terraform plan ───────────────────────────────────────────────
+      # Generates a binary plan file we render and upload below. `-detailed-
+      # exitcode` exits 2 when there's a diff, which we treat as success
+      # here so the comment-on-PR step still runs.
+      # - name: terraform plan
+      #   id: plan
+      #   run: terraform plan -input=false -no-color -out=tfplan -detailed-exitcode
+      #   working-directory: infra/terraform
+      #   continue-on-error: true
+      #   env:
+      #     TF_VAR_pg_admin_password: ${{ secrets.PG_ADMIN_PASSWORD }}
+      - name: terraform plan (DORMANT)
+        id: plan
+        run: |
+          echo "DORMANT - would run: terraform plan -input=false -no-color -out=tfplan -detailed-exitcode"
+
+      # ── Render plan to text ──────────────────────────────────────────
+      # `terraform show` is what you'd render to attach to the PR.
+      # - name: render plan
+      #   if: github.event_name == 'pull_request'
+      #   run: terraform show -no-color tfplan > plan.txt
+      #   working-directory: infra/terraform
+      - name: render plan (DORMANT)
+        if: false
+        run: |
+          echo "DORMANT - would render plan.txt for PR comment"
+
+      # ── Comment plan on the PR ───────────────────────────────────────
+      # GitHub limits a single comment body to 65 535 chars; we slice to
+      # 60 000 to leave room for the code-fence markers.
+      # - name: comment plan on PR
+      #   if: github.event_name == 'pull_request'
+      #   uses: actions/github-script@v7
+      #   with:
+      #     script: |
+      #       const fs   = require('fs')
+      #       const path = 'infra/terraform/plan.txt'
+      #       if (!fs.existsSync(path)) return
+      #       const plan = fs.readFileSync(path, 'utf8').slice(0, 60_000)
+      #       const body = '<details><summary>terraform plan</summary>\n\n```diff\n' +
+      #                    plan +
+      #                    '\n```\n</details>'
+      #       await github.rest.issues.createComment({
+      #         issue_number: context.issue.number,
+      #         owner:        context.repo.owner,
+      #         repo:         context.repo.repo,
+      #         body,
+      #       })
+      - name: comment plan on PR (DORMANT)
+        if: false
+        run: |
+          echo "DORMANT - would comment the plan diff on the PR"
+
+      # ── Fail the job if plan exited with an error (not just a diff) ──
+      # `-detailed-exitcode` returns 0 (no diff), 1 (error), or 2 (diff).
+      # - name: fail on plan error
+      #   if: steps.plan.outcome == 'failure' && steps.plan.outputs.exitcode == '1'
+      #   run: exit 1
+      - name: fail on plan error (DORMANT)
+        if: false
+        run: |
+          echo "DORMANT - would fail the job if plan exited 1"
+
+  # ───────────────────────────────────────────────────────────────────────
+  # apply — runs only after a merge to main, AND only after a human approves
+  # the deployment in the `production` GitHub Environment. Right now it's
+  # additionally locked behind `if: false` so it can never run.
+  # ───────────────────────────────────────────────────────────────────────
+  apply:
+    name: terraform apply
+    needs: plan
+    runs-on: ubuntu-24.04
+    if: false # ← DORMANT safety net. Remove this entire line on activation.
+    # When activating, replace `if: false` with:
+    # if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production # require human approval via Settings → Environments
+    steps:
+      - uses: actions/checkout@v4
+
+      # - uses: azure/login@v2
+      #   with:
+      #     client-id: ${{ secrets.AZURE_CLIENT_ID }}
+      #     tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+      #     subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.5
+
+      # - name: terraform init
+      #   run: terraform init -input=false
+      #   working-directory: infra/terraform
+      - name: terraform init (DORMANT)
+        run: |
+          echo "DORMANT - would run: terraform init -input=false"
+
+      # - name: terraform apply
+      #   run: terraform apply -input=false -auto-approve
+      #   working-directory: infra/terraform
+      #   env:
+      #     TF_VAR_pg_admin_password: ${{ secrets.PG_ADMIN_PASSWORD }}
+      - name: terraform apply (DORMANT)
+        run: |
+          echo "DORMANT - would run: terraform apply -input=false -auto-approve"
+
+      # - name: publish outputs as job summary
+      #   run: |
+      #     {
+      #       echo '### Terraform outputs'
+      #       echo '```json'
+      #       terraform output -json
+      #       echo '```'
+      #     } >> "$GITHUB_STEP_SUMMARY"
+      #   working-directory: infra/terraform
+      - name: publish outputs (DORMANT)
+        run: |
+          echo "DORMANT - would publish terraform output -json to the run summary"
