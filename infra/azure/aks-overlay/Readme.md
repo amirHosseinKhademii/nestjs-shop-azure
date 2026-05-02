@@ -4,6 +4,15 @@ The Azure equivalent of [`infra/aws/eks-overlay/`](../../aws/eks-overlay/Readme.
 Same topology, same security model, same `kubectl apply -k` workflow —
 only the cloud-specific bits change.
 
+> **First time on Azure?** Read [`azure-guide.md`](../../../azure-guide.md)
+> at the repo root first. It walks from "I just signed up to Azure" all
+> the way to a live URL, including the GitHub Actions wiring this
+> overlay assumes is already in place.
+>
+> **Prefer Terraform?** [`infra/azure/terraform/`](../terraform/)
+> provisions the resource group + AKS cluster + App Registration +
+> federated credentials + RBAC in one `terraform apply`.
+
 ```
 browser ──► Azure LB ──► ingress-nginx ─┬─► /        web        (SPA)
                                         └─► /graphql api-gateway (NestJS)

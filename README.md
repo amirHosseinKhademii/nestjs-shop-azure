@@ -13,6 +13,7 @@ Portfolio demo: React + NestJS microservices on Azure patterns — gateway (Grap
 ## Documentation
 
 - **[PLAN.md](./PLAN.md)** — architecture blueprint and implementation order.
+- **[azure-guide.md](./azure-guide.md)** — first-time Azure → AKS deploy walkthrough (account → cluster → CD → live URL → teardown).
 
 ## Quick start (local)
 
@@ -45,7 +46,8 @@ Checkout uses **`CHECKOUT_TRANSPORT=http`** in Compose so **shop-svc** POSTs to 
 | `infra/aws/eks-overlay` | One-shot EKS demo deploy — see [`infra/aws/eks-overlay/Readme.md`](infra/aws/eks-overlay/Readme.md) |
 | `infra/azure/aks-overlay` | One-shot AKS demo deploy — see [`infra/azure/aks-overlay/Readme.md`](infra/azure/aks-overlay/Readme.md) |
 | `k8s-local` | Local Minikube manifests (`imagePullPolicy: Never`) — see [`k8s-local/README.md`](k8s-local/README.md) |
-| `infra/terraform` | Azure resources (legacy) |
+| `infra/azure/terraform` | Terraform for the AKS-guide cluster (RG + AKS + Workload Identity Federation) — see [`infra/azure/terraform/README.md`](infra/azure/terraform/README.md) |
+| `infra/terraform` | Older Terraform (Postgres + Redis + Service Bus + ACR for fully-Azure-hosted backends) |
 
 ## CI / CD
 
