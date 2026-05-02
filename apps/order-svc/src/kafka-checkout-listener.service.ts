@@ -54,8 +54,7 @@ export class KafkaCheckoutListenerService implements OnModuleInit, OnModuleDestr
           return;
         }
 
-        const key =
-          message.key?.toString('utf8') ?? body.correlationId ?? raw.slice(0, 120);
+        const key = message.key?.toString('utf8') ?? body.correlationId ?? raw.slice(0, 120);
 
         try {
           await this.orders.createOrderFromCheckout(body, key);
