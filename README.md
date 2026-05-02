@@ -55,7 +55,7 @@ Checkout supports three transports between shop-svc and order-svc, picked via
 | `infra/k8s` | Production Kubernetes manifests (cert-manager + real DNS) — see [`infra/k8s/README.md`](infra/k8s/README.md) |
 | `infra/aws/eks-overlay` | One-shot EKS demo deploy — see [`infra/aws/eks-overlay/Readme.md`](infra/aws/eks-overlay/Readme.md) |
 | `infra/azure/aks-overlay` | One-shot AKS demo deploy — see [`infra/azure/aks-overlay/Readme.md`](infra/azure/aks-overlay/Readme.md) |
-| `k8s-local` | Local Minikube manifests (`imagePullPolicy: Never`) — see [`k8s-local/README.md`](k8s-local/README.md) |
+| `infra/local/minikube-overlay` | One-shot local Minikube deploy — see [`infra/local/minikube-overlay/Readme.md`](infra/local/minikube-overlay/Readme.md) |
 | `infra/azure/terraform` | Terraform for the AKS-guide cluster (RG + AKS + Workload Identity Federation) — see [`infra/azure/terraform/README.md`](infra/azure/terraform/README.md) |
 | `infra/terraform` | Older Terraform (Postgres + Redis + Service Bus + ACR for fully-Azure-hosted backends) |
 

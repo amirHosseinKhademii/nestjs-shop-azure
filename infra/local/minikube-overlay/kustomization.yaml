@@ -1,0 +1,110 @@
+# Kustomize overlay for local Minikube deploys.
+#
+#   minikube start --memory=6g --cpus=4 --driver=docker
+#   minikube addons enable ingress
+#   ./infra/local/minikube-overlay/seed-secrets.sh
+#   kubectl apply -k infra/local/minikube-overlay/
+#
+# Topology stays identical to production AND to the EKS / AKS overlays:
+# ingress-nginx is the ONLY public surface, and routes:
+#   /         → web         (static SPA, served by nginx-unprivileged)
+#   /graphql  → api-gateway (NestJS GraphQL)
+#
+# All backend services (web, api-gateway, user-svc, shop-svc, order-svc)
+# remain ClusterIP — exactly as in production.
+#
+# Differences from infra/k8s/ (production base):
+#   1. The Ingress is patched to work without cert-manager + DNS, same as
+#      the cloud overlays.
+#   2. Every Deployment is scaled to 1 replica so the whole stack fits in
+#      ~2 GB of cluster memory (default Minikube allocation is plenty).
+#   3. `imagePullPolicy` is left at `IfNotPresent` (the production default),
+#      which means:
+#        • If you've run `eval $(minikube docker-env) && docker build ...`
+#          to load locally-built images into Minikube's Docker daemon, those
+#          local images are used (their tags/digests will match).
+#        • Otherwise, kubelet pulls the public Docker Hub images that CD
+#          pushes — same as cloud deploys.
+#      To force pure-local with NO registry pulls, set
+#        imagePullPolicy: Never
+#      on the deployments (or use a per-deployment patch).
+#
+# Prerequisites:
+#   • minikube >= 1.33  (tested with the docker driver)
+#   • kubectl (or `minikube kubectl --`)
+#   • A populated `.env` at the repo root — see secrets.example.yaml.
+#
+# To open the SPA after `kubectl apply`:
+#   echo "$(minikube ip) shop.local" | sudo tee -a /etc/hosts
+#   open "http://shop.local"
+#
+# (Or skip the hosts entry and use any nip.io name, e.g. http://<minikube-ip>.nip.io)
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../k8s
+
+patches:
+  # ── Loosen the Ingress for an HTTP-only / no-DNS environment ───────────
+  - target:
+      kind: Ingress
+      name: shop
+    patch: |-
+      - op: remove
+        path: /spec/tls
+      - op: remove
+        path: /spec/rules/0/host
+      - op: remove
+        path: /metadata/annotations/cert-manager.io~1cluster-issuer
+      - op: replace
+        path: /metadata/annotations/nginx.ingress.kubernetes.io~1ssl-redirect
+        value: "false"
+      - op: replace
+        path: /metadata/annotations/nginx.ingress.kubernetes.io~1force-ssl-redirect
+        value: "false"
+      - op: replace
+        path: /metadata/annotations/nginx.ingress.kubernetes.io~1hsts
+        value: "false"
+
+  # ── Scale every deployment to 1 replica to fit a laptop-sized cluster ──
+  # We use a strategic-merge patch and a label selector so this single
+  # patch applies to every Deployment in the base.
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+
+  # ── Loosen NetworkPolicy egress so pods can reach external SaaS used in
+  #    the prototype (Aiven Kafka uses a non-443 port; Atlas SRV lookups
+  #    can hit ports other than 27017; Upstash uses 6379). On Minikube the
+  #    default driver doesn't enforce NetworkPolicy at all so this patch is
+  #    cosmetic — but it keeps `kubectl describe` honest, and it's required
+  #    if you started Minikube with `--cni=calico` to test policies.
+  - target:
+      kind: NetworkPolicy
+      name: shop-svc
+    patch: |-
+      - op: add
+        path: /spec/egress/-
+        value:
+          ports:
+            - protocol: TCP
+              port: 9092          # plaintext Kafka (Redpanda / dev)
+            - protocol: TCP
+              port: 27782         # Aiven Kafka (your free-tier port)
+  - target:
+      kind: NetworkPolicy
+      name: order-svc
+    patch: |-
+      - op: add
+        path: /spec/egress/-
+        value:
+          ports:
+            - protocol: TCP
+              port: 9092
+            - protocol: TCP
+              port: 27782
