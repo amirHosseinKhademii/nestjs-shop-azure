@@ -87,8 +87,36 @@ data:
     }
 
     // ── Logs → Grafana Cloud Loki ───────────────────────────────────────────
+    // Promote `__meta_kubernetes_*` discovery labels to indexed Loki labels.
+    // Without this step the only labels you'd see in Loki are `job` and
+    // `instance`, so PromQL-style filters like {namespace="shop"} return 0.
+    discovery.relabel "shop_log_targets" {
+      targets = discovery.kubernetes.shop_pods.targets
+
+      rule {
+        source_labels = ["__meta_kubernetes_namespace"]
+        target_label  = "namespace"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_name"]
+        target_label  = "pod"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_container_name"]
+        target_label  = "container"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_label_app"]
+        target_label  = "app"
+      }
+      rule {
+        source_labels = ["__meta_kubernetes_pod_node_name"]
+        target_label  = "node"
+      }
+    }
+
     loki.source.kubernetes "shop_logs" {
-      targets    = discovery.kubernetes.shop_pods.targets
+      targets    = discovery.relabel.shop_log_targets.output
       forward_to = [loki.write.grafana.receiver]
     }
 
