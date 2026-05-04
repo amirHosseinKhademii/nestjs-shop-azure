@@ -519,23 +519,74 @@ kubectl -n ingress-nginx get svc ingress-nginx-controller \
 
 ## Phase 10 — Wire GitHub Actions
 
-The simplest path: copy-paste the `gh` block Terraform printed:
+Terraform only set up the *AWS side* (the IAM role + EKS access entry that GitHub will assume via OIDC). The CD workflow (`.github/workflows/cd.yml`) still needs **9 values** in your repo's GitHub Actions settings before it can run end-to-end:
+
+- 3 from this Terraform module (cluster identity + the OIDC role ARN),
+- 2 from Docker Hub (image push credentials),
+- 4 application secrets (DB / cache / JWT) the cluster's `seed-secrets` job applies as the `shop-app-secrets` Secret in the `shop` namespace.
+
+If any of the **required** values below are missing, the `seed-secrets` job validates them up front and exits 1 with a clear message — no half-deployed cluster.
+
+### Required Secrets and Variables (full table)
+
+| Type | Name | Value | Where it comes from |
+|------|------|-------|----------------------|
+| Variable | `EKS_CLUSTER_NAME` | e.g. `shop-demo` | `terraform output -raw cluster_name` |
+| Variable | `AWS_REGION` | e.g. `eu-west-1` | `terraform output -raw aws_region` |
+| Secret | `AWS_ROLE_TO_ASSUME` | e.g. `arn:aws:iam::878752032363:role/shop-demo-github-oidc` | `terraform output -raw github_oidc_role_arn` |
+| Secret | `DOCKERHUB_USERNAME` | your Docker Hub login | [hub.docker.com](https://hub.docker.com) |
+| Secret | `DOCKERHUB_TOKEN` | a Personal Access Token with **Read & Write** | [hub.docker.com/settings/personal-access-tokens](https://hub.docker.com/settings/personal-access-tokens) |
+| Secret | `DATABASE_URL` | Postgres URL for `order-svc` / `user-svc` | any managed Postgres (e.g. [Neon](https://neon.tech) free tier) |
+| Secret | `MONGO_URI` | MongoDB URI for `shop-svc` | e.g. [MongoDB Atlas free tier](https://www.mongodb.com/atlas) |
+| Secret | `REDIS_URL` | Redis URL for `shop-svc` | e.g. [Upstash](https://upstash.com) free tier |
+| Secret | `JWT_SECRET` | random 32+ byte string | `openssl rand -hex 32` |
+
+### Optional Variables and Secrets
+
+| Type | Name | Default | Effect |
+|------|------|---------|--------|
+| Variable | `DOCKERHUB_NAMESPACE` | `DOCKERHUB_USERNAME` | Push images to a different DH namespace (org accounts) |
+| Secret | `SERVICEBUS_CONNECTION_STRING` | unset | Enables the Azure Service Bus listener in `order-svc` |
+| Secret | `KAFKA_BROKERS`, `KAFKA_USERNAME`, `KAFKA_PASSWORD`, `KAFKA_SSL_*`, `KAFKA_TOPIC`, `KAFKA_GROUP_ID` | unset | Enables the Kafka checkout listener in `order-svc` |
+
+### Fastest path — one-shot `gh` script
+
+Requires `gh auth login` first (`brew install gh && gh auth login`).
 
 ```bash
-terraform output -raw github_setup
+REPO=amirHosseinKhademii/nestjs-shop-azure   # ← change if you forked
+
+# ── Pull AWS-side values straight from Terraform ───────────────────────
+cd infra/terraform/aws
+ROLE_ARN=$(terraform output -raw github_oidc_role_arn)
+REGION=$(terraform output -raw aws_region)
+CLUSTER=$(terraform output -raw cluster_name)
+cd -
+
+gh secret   set AWS_ROLE_TO_ASSUME -R "$REPO" --body "$ROLE_ARN"
+gh variable set AWS_REGION         -R "$REPO" --body "$REGION"
+gh variable set EKS_CLUSTER_NAME   -R "$REPO" --body "$CLUSTER"
+
+# ── Docker Hub ──────────────────────────────────────────────────────────
+gh secret set DOCKERHUB_USERNAME -R "$REPO" --body 'YOUR_DOCKERHUB_USER'
+gh secret set DOCKERHUB_TOKEN    -R "$REPO" --body 'dckr_pat_xxxxxxxxxxxxxxxxxxxxxxxxxxxx'
+
+# ── App secrets ─────────────────────────────────────────────────────────
+gh secret set DATABASE_URL -R "$REPO" --body 'postgres://user:pass@host:5432/shop'
+gh secret set MONGO_URI    -R "$REPO" --body 'mongodb+srv://user:pass@cluster.mongodb.net/shop'
+gh secret set REDIS_URL    -R "$REPO" --body 'redis://default:pass@host:6379'
+gh secret set JWT_SECRET   -R "$REPO" --body "$(openssl rand -hex 32)"
+
+# ── Confirm everything is in place ──────────────────────────────────────
+gh secret   list -R "$REPO"
+gh variable list -R "$REPO"
 ```
 
-That outputs three commands (one per Variable/Secret) plus a verification step. Run them. Requires `gh auth login` first.
+The shorter `terraform output -raw github_setup` block prints only the **first three** (AWS-side) commands. It's a starting point, not the full picture — pair it with the Docker Hub + app-secret commands above.
 
-If you'd rather click in the GitHub UI, go to **Settings → Secrets and variables → Actions** in your repo, then add:
+If you'd rather click in the GitHub UI, go to **Settings → Secrets and variables → Actions** and add each row from the table above by hand.
 
-| Type | Name | Value |
-|------|------|-------|
-| Repository **Variable** | `EKS_CLUSTER_NAME` | `terraform output -raw cluster_name` |
-| Repository **Variable** | `AWS_REGION` | `terraform output -raw aws_region` |
-| Repository **Secret** | `AWS_ROLE_TO_ASSUME` | `terraform output -raw github_oidc_role_arn` |
-
-The `if: vars.EKS_CLUSTER_NAME != ''` gate at line 362 of `cd.yml` activates the moment `EKS_CLUSTER_NAME` is set. Until then, the `deploy:` job is silently skipped, which is what you want for a demo branch you don't intend to deploy.
+The `if: vars.EKS_CLUSTER_NAME != ''` gate in `cd.yml` activates the `deploy` job the moment `EKS_CLUSTER_NAME` is set. Until then, `deploy` is silently skipped — handy if you want to push code to a branch but not deploy yet.
 
 ### Create the GitHub Environment
 
@@ -583,6 +634,10 @@ When `deploy` finishes, scroll to the job summary (link at top of the run) for *
 ---
 
 ## Phase 12 — Smoke test
+
+The `deploy` job in `cd.yml` already runs an automated smoke test as its last step (probes `GET /` and `POST /graphql`, retries up to ~2 min, fails the run on any miss, writes a result table to the job summary). So if your CD run is green, the cluster is serving traffic — no manual check required.
+
+This phase is the manual "second opinion" you'd run from your laptop when something looks off in CI or you want to poke around live:
 
 ```bash
 URL=$(kubectl -n ingress-nginx get svc ingress-nginx-controller \
