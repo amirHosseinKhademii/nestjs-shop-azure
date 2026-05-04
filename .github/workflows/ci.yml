@@ -163,19 +163,22 @@ jobs:
             echo "turbo build → **${{ job.status }}**"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ─── Stage 4 ─ GraphQL schema drift guard ─────────────────────────────────
+  # ─── Stage 4 ─ GraphQL schema + codegen drift guard ───────────────────────
   #
   # The api-gateway is code-first: resolvers are the source of truth and
-  # `apps/api-gateway/src/schema.gql` is regenerated at every dev boot. CI
-  # re-emits the SDL headlessly and fails the build if it differs from the
-  # committed file — meaning a developer changed a resolver without committing
-  # the regenerated schema. Also verifies the published `@shop/graphql-schema`
-  # package's `schema.graphql` mirrors the gateway source exactly.
+  # `apps/api-gateway/src/schema.gql` is regenerated at every dev boot. The
+  # contract then flows: gateway SDL → @shop/graphql-schema → web codegen.
+  # We verify each hop independently so failures point at exactly which
+  # commit step the developer skipped.
+  #
+  # Order matters here: we MUST diff the committed schema files before
+  # building @shop/graphql-schema, because that package's prebuild copies
+  # the gateway SDL into its own folder and would mask staleness checks.
   schema:
     name: Schema · drift guard
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 7
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -185,15 +188,19 @@ jobs:
       - name: Setup Node 24 + pnpm + install
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build api-gateway and graphql-schema
-        run: >-
-          pnpm exec turbo run build
-          --filter=@shop/api-gateway
-          --filter=@shop/graphql-schema
+      # Build only the gateway here — its `dist/scripts/emit-schema.js` is
+      # what `schema:check` invokes. We deliberately skip
+      # @shop/graphql-schema's build because its prebuild rewrites
+      # `packages/graphql-schema/schema.graphql` from the gateway source,
+      # which would defeat the staleness diff in the next step.
+      - name: Build api-gateway
+        run: pnpm exec turbo run build --filter=@shop/api-gateway
 
-      - name: Resolvers ↔ committed SDL drift check
+      # 1/3 — Resolvers ↔ committed gateway SDL.
+      - name: Resolvers ↔ committed SDL
         run: pnpm --filter @shop/api-gateway run schema:check
 
+      # 2/3 — Gateway SDL ↔ @shop/graphql-schema bundled SDL.
       - name: Schema package mirrors gateway SDL
         run: |
           set -euo pipefail
@@ -203,13 +210,29 @@ jobs:
             exit 1;
           }
 
+      # 3/3 — Web's `__generated__/` ↔ current schema + queries.
+      #
+      # `codegen:check` runs `graphql-codegen` against the workspace-linked
+      # `@shop/graphql-schema/schema.graphql` and then `git diff --exit-code`
+      # on `src/__generated__`. This catches BOTH:
+      #   - "schema changed but codegen wasn't re-run" (stale generated types
+      #     hide a runtime contract break that typecheck cannot see)
+      #   - "schema removed a field still referenced by a `gql` template
+      #     literal in the source" (codegen itself errors out)
+      - name: Web codegen ↔ schema
+        run: pnpm --filter @shop/web run codegen:check
+
       - name: Job summary
         if: always()
         run: |
           {
             echo "## Schema drift guard"
             echo ""
-            echo "Verified resolvers, committed SDL, and \`@shop/graphql-schema\` are all in sync → **${{ job.status }}**"
+            echo "Verified the full contract chain → **${{ job.status }}**"
+            echo ""
+            echo "1. Gateway resolvers ↔ committed \`apps/api-gateway/src/schema.gql\`"
+            echo "2. Gateway SDL ↔ \`@shop/graphql-schema\`'s bundled SDL"
+            echo "3. \`@shop/graphql-schema\` ↔ \`apps/web/src/__generated__/\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ─── Rollup ─ Single required check for branch protection ─────────────────
