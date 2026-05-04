@@ -2,7 +2,6 @@ import { useState, type FormEvent } from 'react';
 import { useMutation } from '@apollo/client';
 import { Link, useNavigate } from 'react-router-dom';
 import { REGISTER } from '../graphql/mutations';
-import type { RegisterMutation, RegisterVars } from '../graphql/types';
 import { useAuth } from '../auth/useAuth';
 
 export function RegisterPage() {
@@ -11,7 +10,7 @@ export function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [register, { loading, error }] = useMutation<RegisterMutation, RegisterVars>(REGISTER);
+  const [register, { loading, error }] = useMutation(REGISTER);
 
   const onSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();

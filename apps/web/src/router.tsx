@@ -7,7 +7,7 @@ import { RootLayout } from './App';
 import { RequireAuth } from './components/RequireAuth';
 import { LoginPage } from './pages/LoginPage';
 import { RegisterPage } from './pages/RegisterPage';
-import { ProductsPage } from './pages/ProductsPage';
+import { ProductsPage } from './pages/product';
 import { CartPage } from './pages/CartPage';
 import { OrdersPage } from './pages/OrdersPage';
 

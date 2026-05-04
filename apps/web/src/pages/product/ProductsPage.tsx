@@ -1,33 +1,26 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@apollo/client';
 import { Link } from 'react-router-dom';
-import { PRODUCTS } from '../graphql/queries';
-import { ADD_TO_CART, CREATE_PRODUCT } from '../graphql/mutations';
-import type {
-  AddToCartMutation,
-  AddToCartVars,
-  CreateProductMutation,
-  CreateProductVars,
-  Product,
-  ProductsQuery,
-} from '../graphql/types';
-import { useAuth } from '../auth/useAuth';
-import { Spinner } from '../components/Spinner';
-import { EmptyState } from '../components/EmptyState';
+import { PRODUCTS } from '../../graphql/queries';
+import { ADD_TO_CART } from '../../graphql/mutations';
+import type { ProductsQuery } from '../../__generated__/graphql';
+import { useAuth } from '../../auth/useAuth';
+import { Spinner } from '../../components/Spinner';
+import { EmptyState } from '../../components/EmptyState';
+import { AddProduct } from './containers/add-product/AddProduct';
+
+// Single-product shape is derived from the generated query type so it always
+// matches what the resolver actually returns for this selection set.
+type Product = ProductsQuery['products'][number];
 
 const formatPrice = (cents: number) =>
   new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(cents / 100);
 
 export function ProductsPage() {
   const { isAuthenticated } = useAuth();
-  const { data, loading, error, refetch } = useQuery<ProductsQuery>(PRODUCTS);
-  const [addToCart, { loading: adding }] = useMutation<AddToCartMutation, AddToCartVars>(
-    ADD_TO_CART,
-  );
-  const [createProduct, { loading: seeding }] = useMutation<
-    CreateProductMutation,
-    CreateProductVars
-  >(CREATE_PRODUCT);
+  const { data, loading, error } = useQuery(PRODUCTS);
+  const [addToCart, { loading: adding }] = useMutation(ADD_TO_CART);
+
   const [pendingId, setPendingId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -40,18 +33,6 @@ export function ProductsPage() {
       setPendingId(null);
       setTimeout(() => setToast(null), 2500);
     }
-  };
-
-  const onSeed = async () => {
-    await createProduct({
-      variables: {
-        name: 'Demo product',
-        priceCents: 999,
-        description: 'Created from UI',
-        stock: 10,
-      },
-    });
-    await refetch();
   };
 
   if (loading) return <Spinner label="Loading products" />;
@@ -74,26 +55,14 @@ export function ProductsPage() {
             {products.length} item{products.length === 1 ? '' : 's'} in catalog
           </p>
         </div>
-        <button
-          type="button"
-          className="btn btn--ghost"
-          onClick={onSeed}
-          disabled={seeding}
-          title="Insert a sample product"
-        >
-          {seeding ? 'Adding…' : '+ Demo product'}
-        </button>
+        <AddProduct />
       </header>
 
       {products.length === 0 ? (
         <EmptyState
           title="No products yet"
-          description="Seed the catalog to get started."
-          action={
-            <button type="button" className="btn btn--primary" onClick={onSeed} disabled={seeding}>
-              Create demo product
-            </button>
-          }
+          description="Add your first product to get the catalog started."
+          action={<AddProduct triggerLabel="Add your first product" />}
         />
       ) : (
         <ul className="grid">

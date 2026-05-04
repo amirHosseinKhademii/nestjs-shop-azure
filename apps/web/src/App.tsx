@@ -3,11 +3,13 @@ import { Outlet } from 'react-router-dom';
 import { Nav } from './components/Nav';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Spinner } from './components/Spinner';
+import { SessionGuard } from './auth/SessionGuard';
 
 /** Shell for React Router data API (`RouterProvider` + nested routes). */
 export function RootLayout() {
   return (
     <div className="app">
+      <SessionGuard />
       <Nav />
       <main className="container" id="main">
         <ErrorBoundary>

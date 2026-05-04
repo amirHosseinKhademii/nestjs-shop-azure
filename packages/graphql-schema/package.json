@@ -1,0 +1,39 @@
+{
+  "name": "@shop/graphql-schema",
+  "version": "0.0.1",
+  "description": "Public GraphQL SDL contract emitted by @shop/api-gateway. Consumed by clients (web, partners) for codegen and mocking.",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./schema.graphql": "./schema.graphql",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "schema.graphql",
+    "README.md"
+  ],
+  "scripts": {
+    "copy:schema": "node scripts/copy-schema.mjs",
+    "prebuild": "pnpm run copy:schema",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src --ext .ts || true",
+    "typecheck": "pnpm run copy:schema && tsc --noEmit -p tsconfig.json",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "graphql": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "graphql": "^16.10.0",
+    "typescript": "^5.7.2"
+  }
+}

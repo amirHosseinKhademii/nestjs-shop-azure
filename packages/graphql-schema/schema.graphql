@@ -1,0 +1,71 @@
+# ------------------------------------------------------
+# THIS FILE WAS AUTOMATICALLY GENERATED (DO NOT MODIFY)
+# ------------------------------------------------------
+
+type AuthPayloadGql {
+  accessToken: String!
+  expiresIn: String!
+  user: UserGql!
+}
+
+type CartGql {
+  items: [CartLineGql!]!
+}
+
+type CartLineGql {
+  productId: String!
+  qty: Float!
+}
+
+type CheckoutResultGql {
+  accepted: Boolean!
+  cartId: String!
+  channel: String!
+  correlationId: String!
+}
+
+type Mutation {
+  addToCart(productId: String!, qty: Int!): CartGql!
+  checkout: CheckoutResultGql!
+  createProduct(description: String, name: String!, priceCents: Int!, stock: Int): ProductGql!
+  login(email: String!, password: String!): AuthPayloadGql!
+  register(displayName: String, email: String!, password: String!): AuthPayloadGql!
+}
+
+type OrderGql {
+  cartId: String!
+  correlationId: String!
+  id: String!
+  lines: [OrderLineGql!]!
+  status: String!
+  userId: String!
+}
+
+type OrderLineGql {
+  id: String!
+  priceCents: Float!
+  productId: String!
+  quantity: Float!
+}
+
+type ProductGql {
+  description: String
+  id: String!
+  name: String!
+  priceCents: Float!
+  stock: Float!
+}
+
+type Query {
+  cart: CartGql!
+  me: UserGql!
+  order(id: String!): OrderGql
+  orders: [OrderGql!]!
+  products: [ProductGql!]!
+}
+
+type UserGql {
+  displayName: String
+  email: String!
+  id: String!
+}

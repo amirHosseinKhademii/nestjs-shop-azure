@@ -1,9 +1,13 @@
 import { useQuery } from '@apollo/client';
 import { Link } from 'react-router-dom';
 import { ORDERS } from '../graphql/queries';
-import type { Order, OrderStatus, OrdersQuery } from '../graphql/types';
+import type { OrdersQuery } from '../__generated__/graphql';
 import { Spinner } from '../components/Spinner';
 import { EmptyState } from '../components/EmptyState';
+
+// Result row types are derived from the generated query type so they cannot
+// drift from the SDL contract shipped by `@shop/graphql-schema`.
+type Order = OrdersQuery['orders'][number];
 
 const statusToBadge: Record<string, string> = {
   PENDING: 'badge--warn',
@@ -12,10 +16,10 @@ const statusToBadge: Record<string, string> = {
   FAILED: 'badge--danger',
 };
 
-const badgeFor = (status: OrderStatus) => statusToBadge[status] ?? 'badge--muted';
+const badgeFor = (status: string) => statusToBadge[status] ?? 'badge--muted';
 
 export function OrdersPage() {
-  const { data, loading, error } = useQuery<OrdersQuery>(ORDERS);
+  const { data, loading, error } = useQuery(ORDERS);
 
   if (loading) return <Spinner label="Loading orders" />;
   if (error) {

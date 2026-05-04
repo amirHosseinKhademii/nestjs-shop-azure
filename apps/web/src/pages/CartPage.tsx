@@ -3,14 +3,13 @@ import { useQuery, useMutation } from '@apollo/client';
 import { Link } from 'react-router-dom';
 import { CART } from '../graphql/queries';
 import { CHECKOUT } from '../graphql/mutations';
-import type { CartQuery, CheckoutMutation } from '../graphql/types';
 import { Spinner } from '../components/Spinner';
 import { EmptyState } from '../components/EmptyState';
 
 export function CartPage() {
-  const { data, loading, error } = useQuery<CartQuery>(CART);
+  const { data, loading, error } = useQuery(CART);
   const [checkout, { data: checkoutData, loading: checkingOut, error: checkoutError }] =
-    useMutation<CheckoutMutation>(CHECKOUT);
+    useMutation(CHECKOUT);
   const [showReceipt, setShowReceipt] = useState(false);
 
   const onCheckout = async () => {

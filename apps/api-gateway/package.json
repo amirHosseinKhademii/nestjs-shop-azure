@@ -8,7 +8,9 @@
     "start:dev": "nest start --watch",
     "lint": "eslint \"src/**/*.ts\" --max-warnings 0",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "jest"
+    "test": "jest",
+    "schema:emit": "node dist/scripts/emit-schema.js",
+    "schema:check": "node scripts/check-schema-drift.mjs"
   },
   "dependencies": {
     "@apollo/server": "^4.11.2",

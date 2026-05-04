@@ -12,7 +12,7 @@ import globals from 'globals';
 const tsconfigRootDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default tseslint.config(
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**'] },
+  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/__generated__/**'] },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {

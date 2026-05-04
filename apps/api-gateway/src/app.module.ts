@@ -42,12 +42,18 @@ const apiGatewayEnv = join(__dirname, '..', '.env');
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
         const isProd = config.get<string>('NODE_ENV') === 'production';
+        // In dev, drop the SDL next to the source so codegen / IDE tooling
+        // can pick it up. In prod the rootfs is read-only (k8s
+        // securityContext.readOnlyRootFilesystem), so write to /tmp which is
+        // mounted as an emptyDir. Apollo only needs this file at boot.
+        // `SCHEMA_OUTPUT_PATH` is honoured first so the offline `schema:emit`
+        // script (used in CI drift checks) can redirect the SDL to a temp file
+        // without touching the committed source.
+        const autoSchemaFile =
+          process.env.SCHEMA_OUTPUT_PATH ??
+          (isProd ? '/tmp/schema.gql' : join(process.cwd(), 'src/schema.gql'));
         return {
-          // In dev, drop the SDL next to the source so codegen / IDE tooling
-          // can pick it up. In prod the rootfs is read-only (k8s
-          // securityContext.readOnlyRootFilesystem), so write to /tmp which
-          // is mounted as an emptyDir. Apollo only needs this file at boot.
-          autoSchemaFile: isProd ? '/tmp/schema.gql' : join(process.cwd(), 'src/schema.gql'),
+          autoSchemaFile,
           sortSchema: true,
           debug: !isProd,
           playground: !isProd,

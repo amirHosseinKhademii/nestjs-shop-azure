@@ -1,6 +1,6 @@
-import { gql } from '@apollo/client';
+import { graphql } from '../__generated__/gql';
 
-export const PRODUCTS = gql`
+export const PRODUCTS = graphql(`
   query Products {
     products {
       id
@@ -10,9 +10,9 @@ export const PRODUCTS = gql`
       stock
     }
   }
-`;
+`);
 
-export const CART = gql`
+export const CART = graphql(`
   query Cart {
     cart {
       items {
@@ -21,9 +21,9 @@ export const CART = gql`
       }
     }
   }
-`;
+`);
 
-export const ORDERS = gql`
+export const ORDERS = graphql(`
   query Orders {
     orders {
       id
@@ -35,4 +35,4 @@ export const ORDERS = gql`
       }
     }
   }
-`;
+`);

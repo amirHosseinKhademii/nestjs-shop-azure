@@ -163,10 +163,59 @@ jobs:
             echo "turbo build → **${{ job.status }}**"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ─── Stage 4 ─ GraphQL schema drift guard ─────────────────────────────────
+  #
+  # The api-gateway is code-first: resolvers are the source of truth and
+  # `apps/api-gateway/src/schema.gql` is regenerated at every dev boot. CI
+  # re-emits the SDL headlessly and fails the build if it differs from the
+  # committed file — meaning a developer changed a resolver without committing
+  # the regenerated schema. Also verifies the published `@shop/graphql-schema`
+  # package's `schema.graphql` mirrors the gateway source exactly.
+  schema:
+    name: Schema · drift guard
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node 24 + pnpm + install
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Build api-gateway and graphql-schema
+        run: >-
+          pnpm exec turbo run build
+          --filter=@shop/api-gateway
+          --filter=@shop/graphql-schema
+
+      - name: Resolvers ↔ committed SDL drift check
+        run: pnpm --filter @shop/api-gateway run schema:check
+
+      - name: Schema package mirrors gateway SDL
+        run: |
+          set -euo pipefail
+          diff -u apps/api-gateway/src/schema.gql packages/graphql-schema/schema.graphql || {
+            echo "::error::packages/graphql-schema/schema.graphql is out of sync with apps/api-gateway/src/schema.gql.";
+            echo "Run 'pnpm --filter @shop/graphql-schema run build' and commit the result.";
+            exit 1;
+          }
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## Schema drift guard"
+            echo ""
+            echo "Verified resolvers, committed SDL, and \`@shop/graphql-schema\` are all in sync → **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # ─── Rollup ─ Single required check for branch protection ─────────────────
   ci-summary:
     name: CI summary
-    needs: [format, verify, build]
+    needs: [format, verify, build, schema]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 1
@@ -177,6 +226,7 @@ jobs:
           F='${{ needs.format.result }}'
           V='${{ needs.verify.result }}'
           B='${{ needs.build.result }}'
+          S='${{ needs.schema.result }}'
           {
             echo "# CI rollup"
             echo ""
@@ -185,9 +235,10 @@ jobs:
             echo "| Format            | $F |"
             echo "| Verify (matrix×5) | $V |"
             echo "| Build  (matrix×5) | $B |"
+            echo "| Schema drift      | $S |"
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$F" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ]; then
-            echo "::error::At least one CI stage was not successful (format=$F verify=$V build=$B)"
+          if [ "$F" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$S" != 'success' ]; then
+            echo "::error::At least one CI stage was not successful (format=$F verify=$V build=$B schema=$S)"
             exit 1
           fi
           echo "::notice::All CI stages passed."

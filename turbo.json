@@ -74,6 +74,22 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "@shop/graphql-schema#build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "scripts/**",
+        "$TURBO_ROOT$/apps/api-gateway/src/schema.gql"
+      ],
+      "outputs": ["dist/**", "schema.graphql"]
+    },
+    "@shop/graphql-schema#typecheck": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "scripts/**",
+        "$TURBO_ROOT$/apps/api-gateway/src/schema.gql"
+      ],
+      "outputs": []
     }
   }
 }
