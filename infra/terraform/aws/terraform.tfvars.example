@@ -1,0 +1,35 @@
+# Copy this file to `terraform.tfvars` (gitignored) and fill in the
+# values for your environment. `terraform.tfvars` is auto-loaded by
+# Terraform on every `plan`/`apply`, so you don't have to pass `-var`
+# flags every time.
+
+# ── Required ────────────────────────────────────────────────────────────
+# Your GitHub repo, owner/name format. The IAM trust policy is locked
+# to this repo so no other workflow can assume the deploy role.
+github_repo = "amirHosseinKhademii/nestjs-shop-azure"
+
+# ── Optional overrides (defaults shown) ─────────────────────────────────
+# aws_region          = "eu-west-1"
+# cluster_name        = "shop-demo"
+# kubernetes_version  = "1.30"
+# vpc_cidr            = "10.42.0.0/16"
+# az_count            = 2
+
+# Worker node group
+# node_instance_type  = "t3.medium"
+# node_desired_size   = 2
+# node_min_size       = 2
+# node_max_size       = 4
+# node_disk_size_gb   = 20
+
+# Branches / environments allowed to assume the deploy role
+# github_branches     = ["main"]
+# github_environments = ["production-eks"]
+
+# Set to false on subsequent stacks in the same AWS account
+# (only one OIDC provider per issuer per account is allowed)
+# create_oidc_provider = true
+
+# Toggle ingress-nginx
+# install_ingress_nginx       = true
+# ingress_nginx_chart_version = "4.11.3"

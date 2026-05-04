@@ -1,0 +1,15 @@
+# Local Terraform working files. None of this should ever be committed.
+.terraform/
+.terraform.lock.hcl
+
+# Real values for your environment (use terraform.tfvars.example as the
+# template). May contain sensitive details if you put them inline.
+terraform.tfvars
+*.auto.tfvars
+
+# State and backups (only relevant if you didn't enable a remote backend
+# in providers.tf — local state files MUST NOT be committed since they
+# can contain secrets like generated passwords).
+*.tfstate
+*.tfstate.backup
+*.tfstate.lock.info

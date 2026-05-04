@@ -1,5 +1,12 @@
 # EKS demo overlay
 
+> **First time on AWS?** Provision the cluster + GitHub OIDC role with
+> [`infra/terraform/aws/`](../../terraform/aws/README.md) — one
+> `terraform apply` brings up everything this overlay assumes already
+> exists (VPC, EKS, ingress-nginx, IAM federation). ~25 minutes from zero
+> to a public URL. Need a one-page command reference instead of the long
+> walkthrough? See [`docs/eks-cheatsheet.md`](../../../docs/eks-cheatsheet.md).
+
 Deploys this monorepo onto a vanilla EKS cluster behind an `ingress-nginx`
 Classic ELB. Ingress-nginx is the **only** public surface — `web` and
 `api-gateway` are both `ClusterIP`, exactly as in production.

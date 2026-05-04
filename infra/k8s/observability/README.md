@@ -1,5 +1,7 @@
 # In-cluster Grafana Alloy
 
+> Looking for a one-page reference that spans **both code and infra** (NestJS package + manifests + Alloy + Grafana)? See [`docs/observability-cheatsheet.md`](../../../docs/observability-cheatsheet.md). This README is Alloy-operator-focused only.
+
 Alloy runs as a **DaemonSet** in namespace `observability` and forwards:
 
 | Signal   | Source                         | Destination (Grafana Cloud) |

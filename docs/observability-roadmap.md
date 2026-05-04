@@ -3,9 +3,10 @@
 End-to-end playbook for adding **Grafana Cloud (Mimir + Loki + Tempo) + Prometheus** to this monorepo. Read once for the conceptual map; come back per phase when wiring a new service or onboarding a teammate.
 
 > Companion docs:
+> - [`docs/observability-cheatsheet.md`](./observability-cheatsheet.md) — **single-page reference card** (infra to code, commands + snippets + errors).
 > - [`docs/observability.md`](./observability.md) — architecture, conventions, runbook.
 > - [`docs/grafana-cloud-bootstrap.md`](./grafana-cloud-bootstrap.md) — bootstrap quick reference.
-> - [`infra/k8s/observability/README.md`](../infra/k8s/observability/README.md) — Alloy-only cheat sheet (kubectl commands + common errors).
+> - [`infra/k8s/observability/README.md`](../infra/k8s/observability/README.md) — Alloy-only operator cheat sheet (kubectl commands + common errors).
 
 ---
 

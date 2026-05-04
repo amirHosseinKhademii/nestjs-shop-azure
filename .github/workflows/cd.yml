@@ -430,6 +430,75 @@ jobs:
             echo "[$URL]($URL)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # ── Smoke test ───────────────────────────────────────────────────────
+      # Verifies the cluster is actually serving traffic end-to-end:
+      #   1. GET  /         — confirms ingress-nginx routes to `web` and the
+      #                       SPA is being served (200 + non-empty body).
+      #   2. POST /graphql  — `{ __typename }` is the zero-arg, schema-agnostic
+      #                       probe every GraphQL server accepts. A 200 with
+      #                       `data.__typename` proves api-gateway booted
+      #                       cleanly (DB connection, JWT secret, etc. all OK).
+      #
+      # ELBs occasionally take 30-60 s after a fresh provision before all AZs
+      # answer, so we retry each probe up to 12× with 10 s backoff (~2 min total).
+      # Skipped automatically when the URL step couldn't resolve a hostname.
+      - name: Smoke test (web + GraphQL)
+        if: steps.url.outputs.app_url != ''
+        env:
+          URL: ${{ steps.url.outputs.app_url }}
+        run: |
+          set -euo pipefail
+
+          retry() {
+            local label="$1"; shift
+            local attempt=0
+            until "$@"; do
+              attempt=$((attempt + 1))
+              if [ "$attempt" -ge 12 ]; then
+                echo "::error::${label} failed after ${attempt} attempts"
+                return 1
+              fi
+              echo "${label}: attempt ${attempt} failed, retrying in 10 s…"
+              sleep 10
+            done
+            echo "${label}: OK on attempt $((attempt + 1))"
+          }
+
+          probe_web() {
+            curl --fail --silent --show-error --location \
+                 --max-time 10 --output /tmp/web.html "${URL}/"
+            test -s /tmp/web.html
+          }
+
+          probe_graphql() {
+            local body
+            body=$(curl --fail --silent --show-error \
+                        --max-time 10 \
+                        -H 'content-type: application/json' \
+                        -X POST "${URL}/graphql" \
+                        -d '{"query":"{ __typename }"}')
+            echo "$body" | grep -q '"__typename"'
+          }
+
+          web_status=fail
+          graphql_status=fail
+          retry 'GET /'         probe_web     && web_status=ok     || true
+          retry 'POST /graphql' probe_graphql && graphql_status=ok || true
+
+          {
+            echo "## Smoke test"
+            echo ""
+            echo "| Probe | Result |"
+            echo "| --- | --- |"
+            echo "| \`GET ${URL}/\` | ${web_status} |"
+            echo "| \`POST ${URL}/graphql\` (\`{ __typename }\`) | ${graphql_status} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$web_status" != ok ] || [ "$graphql_status" != ok ]; then
+            echo "::error::Smoke test failed (web=${web_status}, graphql=${graphql_status})"
+            exit 1
+          fi
+
   # ─── 5. Seed shop-app-secrets in AKS from GH Secrets ─────────────────────
   #
   # Twin of `seed-secrets` above, but talks to AKS via federated Azure login
@@ -438,7 +507,11 @@ jobs:
   seed-secrets-aks:
     name: Seed cluster secrets (AKS)
     needs: update-manifests
-    if: vars.AKS_CLUSTER_NAME != ''
+    # AKS branch parked while we focus on EKS. To re-enable:
+    #   1. Restore: if: vars.AKS_CLUSTER_NAME != ''
+    #   2. Set repo variables AKS_CLUSTER_NAME / AKS_RESOURCE_GROUP /
+    #      AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID and secret AZURE_CLIENT_ID.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -557,7 +630,8 @@ jobs:
   deploy-aks:
     name: Deploy to AKS
     needs: [update-manifests, seed-secrets-aks]
-    if: vars.AKS_CLUSTER_NAME != ''
+    # AKS branch parked — see seed-secrets-aks above for the re-enable steps.
+    if: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:

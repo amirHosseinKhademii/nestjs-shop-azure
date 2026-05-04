@@ -14,9 +14,12 @@ Portfolio demo: React + NestJS microservices on Azure patterns — gateway (Grap
 
 - **[PLAN.md](./PLAN.md)** — architecture blueprint and implementation order.
 - **[docs/observability-roadmap.md](./docs/observability-roadmap.md)** — **start here for observability.** End-to-end roadmap (10 phases) for adding Grafana Cloud + Prometheus from scratch: app instrumentation, Alloy DaemonSet, credentials, queries, dashboards, alerts, and every pitfall we hit.
+- **[docs/observability-cheatsheet.md](./docs/observability-cheatsheet.md)** — single-page reference card spanning code + infra: data-flow per signal, file map, 6-command bootstrap, add-a-service in 4 steps, daily kubectl, top-10 errors → fix.
 - **[docs/observability.md](./docs/observability.md)** — architecture diagram, label conventions, runbook snippets.
 - **[docs/grafana-cloud-bootstrap.md](./docs/grafana-cloud-bootstrap.md)** — quick reference for the `.env` keys.
 - **[infra/k8s/observability/README.md](./infra/k8s/observability/README.md)** — Alloy operator cheat sheet (kubectl commands, common errors).
+- **[docs/eks-cheatsheet.md](./docs/eks-cheatsheet.md)** — single-page reference card for the AWS / EKS Terraform module: file map, 8-command bootstrap, network topology + SGs, day-2 snippets, top errors → fix, cost cheat, teardown.
+- **[infra/terraform/aws/README.md](./infra/terraform/aws/README.md)** — full 15-phase EKS walkthrough (account → Terraform → CD → live URL → teardown).
 - **[infra/azure/aks-overlay/azure-guide.md](./infra/azure/aks-overlay/azure-guide.md)** — first-time Azure → AKS deploy walkthrough (account → cluster → CD → live URL → teardown).
 
 ## Quick start (local)
@@ -60,6 +63,7 @@ Checkout supports three transports between shop-svc and order-svc, picked via
 | `infra/aws/eks-overlay` | One-shot EKS demo deploy — see [`infra/aws/eks-overlay/Readme.md`](infra/aws/eks-overlay/Readme.md) |
 | `infra/azure/aks-overlay` | One-shot AKS demo deploy — see [`infra/azure/aks-overlay/Readme.md`](infra/azure/aks-overlay/Readme.md) |
 | `infra/local/minikube-overlay` | One-shot local Minikube deploy — see [`infra/local/minikube-overlay/Readme.md`](infra/local/minikube-overlay/Readme.md) |
+| `infra/terraform/aws` | Terraform for the EKS demo cluster (VPC + EKS + GitHub OIDC + ingress-nginx) — see [`infra/terraform/aws/README.md`](infra/terraform/aws/README.md) |
 | `infra/azure/terraform` | Terraform for the AKS-guide cluster (RG + AKS + Workload Identity Federation) — see [`infra/azure/terraform/README.md`](infra/azure/terraform/README.md) |
 | `infra/terraform` | Older Terraform (Postgres + Redis + Service Bus + ACR for fully-Azure-hosted backends) |
 
