@@ -36,3 +36,45 @@ export const ORDERS = graphql(`
     }
   }
 `);
+
+export const TASKS = graphql(`
+  query Tasks(
+    $page: Int
+    $pageSize: Int
+    $status: TaskStatus
+    $priority: TaskPriority
+    $q: String
+  ) {
+    tasks(page: $page, pageSize: $pageSize, status: $status, priority: $priority, q: $q) {
+      items {
+        id
+        title
+        description
+        status
+        priority
+        dueDate
+        createdAt
+        updatedAt
+      }
+      page
+      pageSize
+      totalItems
+      totalPages
+    }
+  }
+`);
+
+export const TASK = graphql(`
+  query Task($id: String!) {
+    task(id: $id) {
+      id
+      title
+      description
+      status
+      priority
+      dueDate
+      createdAt
+      updatedAt
+    }
+  }
+`);

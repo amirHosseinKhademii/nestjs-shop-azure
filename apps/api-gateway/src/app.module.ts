@@ -3,7 +3,6 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ObservabilityModule } from '@shop/observability';
 import { GraphQLModule } from '@nestjs/graphql';
 import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
-import { HttpModule } from '@nestjs/axios';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
@@ -11,7 +10,8 @@ import { join } from 'path';
 import { AuthResolver } from './graphql/auth.resolver';
 import { ShopResolver } from './graphql/shop.resolver';
 import { OrderResolver } from './graphql/order.resolver';
-import { BackendHttpService } from './backend-http.service';
+import { TasksResolver } from './graphql/tasks.resolver';
+import { BackendContractsService } from './contracts/backend-contracts.service';
 import { GqlJwtGuard } from './graphql/gql-jwt.guard';
 import { GqlThrottlerGuard } from './graphql/gql-throttler.guard';
 import {
@@ -66,7 +66,6 @@ const apiGatewayEnv = join(__dirname, '..', '.env');
         };
       },
     }),
-    HttpModule.register({ timeout: 15000 }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -87,7 +86,8 @@ const apiGatewayEnv = join(__dirname, '..', '.env');
     AuthResolver,
     ShopResolver,
     OrderResolver,
-    BackendHttpService,
+    TasksResolver,
+    BackendContractsService,
     GqlJwtGuard,
     { provide: APP_GUARD, useClass: GqlThrottlerGuard },
   ],

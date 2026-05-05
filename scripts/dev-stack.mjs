@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Local dev stack orchestrator.
+ * Local dev stack orchestrator — **`pnpm dev`** runs this script.
  *
  * Spawns the Nest stack (`pnpm dev:all`) and the .NET task-svc
  * (`dotnet run --project apps/task-svc`) side by side. The .NET service

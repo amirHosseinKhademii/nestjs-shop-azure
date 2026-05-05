@@ -77,8 +77,8 @@ That's the only required env var. See `env.example` for optional knobs
 # 1. Just task-svc (alongside whatever else you have running)
 pnpm dev:task
 
-# 2. Whole stack (Nest services + task-svc, with prefixed parallel logs)
-pnpm dev:full
+# 2. Full monorepo dev (Turbo: gateway + services + web + task-svc — same as `pnpm dev:full`)
+pnpm dev
 
 # 3. Direct dotnet, equivalent to (1)
 dotnet run --project apps/task-svc

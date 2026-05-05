@@ -56,3 +56,39 @@ export const CREATE_PRODUCT = graphql(`
     }
   }
 `);
+
+export const CREATE_TASK = graphql(`
+  mutation CreateTask($input: CreateTaskInputGql!) {
+    createTask(input: $input) {
+      id
+      title
+      description
+      status
+      priority
+      dueDate
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const UPDATE_TASK = graphql(`
+  mutation UpdateTask($id: String!, $input: UpdateTaskInputGql!) {
+    updateTask(id: $id, input: $input) {
+      id
+      title
+      description
+      status
+      priority
+      dueDate
+      createdAt
+      updatedAt
+    }
+  }
+`);
+
+export const DELETE_TASK = graphql(`
+  mutation DeleteTask($id: String!) {
+    deleteTask(id: $id)
+  }
+`);

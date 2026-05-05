@@ -85,10 +85,40 @@ jobs:
             echo "Workspace-wide \`prettier --check\` completed with status **${{ job.status }}**."
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # ─── Stage 1.5 ─ OpenAPI contract drift guard ─────────────────────────────
+  #
+  # Ensures checked-in OpenAPI JSON ↔ generated TS types stay aligned.
+  # This is CI-safe (no service boot / no pulling from localhost).
+  openapi:
+    name: OpenAPI · drift guard
+    needs: format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node 24 + pnpm + install
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: OpenAPI JSON ↔ generated types
+        run: pnpm run openapi:check
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## OpenAPI drift guard"
+            echo ""
+            echo "Verified OpenAPI contracts ↔ generated TS types → **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   # ─── Stage 2 ─ Per-service lint + typecheck + test ────────────────────────
   verify:
     name: Verify · ${{ matrix.service }}
-    needs: format
+    needs: openapi
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     strategy:
@@ -170,7 +200,7 @@ jobs:
   # services' Verify→Build flow: format → restore → build → test.
   dotnet:
     name: Verify+Build · task-svc
-    needs: format
+    needs: openapi
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
@@ -292,7 +322,7 @@ jobs:
   # ─── Rollup ─ Single required check for branch protection ─────────────────
   ci-summary:
     name: CI summary
-    needs: [format, verify, build, dotnet, schema]
+    needs: [format, openapi, verify, build, dotnet, schema]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 1
@@ -301,6 +331,7 @@ jobs:
         run: |
           set -euo pipefail
           F='${{ needs.format.result }}'
+          O='${{ needs.openapi.result }}'
           V='${{ needs.verify.result }}'
           B='${{ needs.build.result }}'
           D='${{ needs.dotnet.result }}'
@@ -311,13 +342,14 @@ jobs:
             echo "| Stage | Result |"
             echo "| --- | --- |"
             echo "| Format            | $F |"
+            echo "| OpenAPI drift     | $O |"
             echo "| Verify (matrix×5) | $V |"
             echo "| Build  (matrix×5) | $B |"
             echo "| task-svc (.NET)   | $D |"
             echo "| Schema drift      | $S |"
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$F" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$D" != 'success' ] || [ "$S" != 'success' ]; then
-            echo "::error::At least one CI stage was not successful (format=$F verify=$V build=$B dotnet=$D schema=$S)"
+          if [ "$F" != 'success' ] || [ "$O" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$D" != 'success' ] || [ "$S" != 'success' ]; then
+            echo "::error::At least one CI stage was not successful (format=$F openapi=$O verify=$V build=$B dotnet=$D schema=$S)"
             exit 1
           fi
           echo "::notice::All CI stages passed."

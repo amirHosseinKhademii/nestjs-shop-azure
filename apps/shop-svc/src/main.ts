@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { registerTracing, correlationIdMiddleware } from '@shop/observability';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
@@ -41,6 +42,24 @@ async function bootstrap() {
       }),
     );
     app.enableCors({ origin: true, credentials: true });
+
+    const openApiDocumentEnabled =
+      process.env.NODE_ENV !== 'production' ||
+      process.env.OPENAPI_DOCUMENT_ENABLED === 'true' ||
+      process.env.OpenApi__DocumentEnabled === 'true';
+
+    if (openApiDocumentEnabled) {
+      const { SwaggerModule, DocumentBuilder } = await import('@nestjs/swagger');
+      const config = new DocumentBuilder()
+        .setTitle('ShopNest shop-svc')
+        .setVersion('1.0.0')
+        .build();
+      const document = SwaggerModule.createDocument(app, config);
+      const server = app.getHttpAdapter().getInstance();
+      server.get('/openapi/v1.json', (_req: unknown, res: { json: (body: unknown) => void }) =>
+        res.json(document),
+      );
+    }
 
     const port = Number(process.env.PORT ?? 3002);
     await app.listen(port, '0.0.0.0');

@@ -5,6 +5,7 @@ pnpm-lock.yaml
 .turbo
 *.log
 apps/web/src/__generated__
+packages/*-svc-contract/src/generated
 packages/graphql-schema/schema.graphql
 apps/api-gateway/src/schema.gql
 

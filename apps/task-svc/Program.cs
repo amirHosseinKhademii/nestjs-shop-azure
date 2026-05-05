@@ -38,9 +38,21 @@ var app = builder.Build();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
-if (app.Environment.IsDevelopment())
+var enableOpenApiDocument =
+    app.Environment.IsDevelopment()
+    || string.Equals(
+        app.Configuration["OpenApi:DocumentEnabled"],
+        "true",
+        StringComparison.OrdinalIgnoreCase
+    );
+
+if (enableOpenApiDocument)
 {
     app.MapOpenApi();
+}
+
+if (app.Environment.IsDevelopment())
+{
     app.MapScalarApiReference(); // GET /scalar
 }
 else

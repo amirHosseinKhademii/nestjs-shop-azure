@@ -90,6 +90,38 @@
         "$TURBO_ROOT$/apps/api-gateway/src/schema.gql"
       ],
       "outputs": []
+    },
+    "@shop/task-svc-contract#build": {
+      "inputs": ["$TURBO_DEFAULT$", "openapi/**"],
+      "outputs": ["dist/**"]
+    },
+    "@shop/task-svc-contract#typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "openapi/**"],
+      "outputs": []
+    },
+    "@shop/user-svc-contract#build": {
+      "inputs": ["$TURBO_DEFAULT$", "openapi/**"],
+      "outputs": ["dist/**"]
+    },
+    "@shop/user-svc-contract#typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "openapi/**"],
+      "outputs": []
+    },
+    "@shop/shop-svc-contract#build": {
+      "inputs": ["$TURBO_DEFAULT$", "openapi/**"],
+      "outputs": ["dist/**"]
+    },
+    "@shop/shop-svc-contract#typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "openapi/**"],
+      "outputs": []
+    },
+    "@shop/order-svc-contract#build": {
+      "inputs": ["$TURBO_DEFAULT$", "openapi/**"],
+      "outputs": ["dist/**"]
+    },
+    "@shop/order-svc-contract#typecheck": {
+      "inputs": ["$TURBO_DEFAULT$", "openapi/**"],
+      "outputs": []
     }
   }
 }

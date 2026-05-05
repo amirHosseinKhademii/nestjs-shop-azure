@@ -1,4 +1,4 @@
-import { Field, ObjectType } from '@nestjs/graphql';
+import { Field, InputType, ObjectType, registerEnumType } from '@nestjs/graphql';
 
 @ObjectType()
 export class UserGql {
@@ -106,4 +106,101 @@ export class OrderGql {
 
   @Field(() => [OrderLineGql])
   lines!: OrderLineGql[];
+}
+
+export enum TaskStatusGql {
+  Todo = 'Todo',
+  InProgress = 'InProgress',
+  Done = 'Done',
+}
+
+registerEnumType(TaskStatusGql, { name: 'TaskStatus' });
+
+export enum TaskPriorityGql {
+  Low = 'Low',
+  Medium = 'Medium',
+  High = 'High',
+}
+
+registerEnumType(TaskPriorityGql, { name: 'TaskPriority' });
+
+@ObjectType()
+export class TaskGql {
+  @Field()
+  id!: string;
+
+  @Field()
+  title!: string;
+
+  @Field({ nullable: true })
+  description?: string;
+
+  @Field(() => TaskStatusGql)
+  status!: TaskStatusGql;
+
+  @Field(() => TaskPriorityGql)
+  priority!: TaskPriorityGql;
+
+  @Field({ nullable: true })
+  dueDate?: string;
+
+  @Field()
+  createdAt!: string;
+
+  @Field()
+  updatedAt!: string;
+}
+
+@ObjectType()
+export class TasksPageGql {
+  @Field(() => [TaskGql])
+  items!: TaskGql[];
+
+  @Field()
+  page!: number;
+
+  @Field()
+  pageSize!: number;
+
+  @Field()
+  totalItems!: number;
+
+  @Field()
+  totalPages!: number;
+}
+
+@InputType()
+export class CreateTaskInputGql {
+  @Field()
+  title!: string;
+
+  @Field({ nullable: true })
+  description?: string;
+
+  @Field(() => TaskStatusGql, { nullable: true })
+  status?: TaskStatusGql;
+
+  @Field(() => TaskPriorityGql, { nullable: true })
+  priority?: TaskPriorityGql;
+
+  @Field({ nullable: true })
+  dueDate?: string;
+}
+
+@InputType()
+export class UpdateTaskInputGql {
+  @Field()
+  title!: string;
+
+  @Field(() => TaskStatusGql)
+  status!: TaskStatusGql;
+
+  @Field(() => TaskPriorityGql)
+  priority!: TaskPriorityGql;
+
+  @Field({ nullable: true })
+  description?: string;
+
+  @Field({ nullable: true })
+  dueDate?: string;
 }

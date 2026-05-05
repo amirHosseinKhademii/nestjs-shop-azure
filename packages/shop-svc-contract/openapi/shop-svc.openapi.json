@@ -1,0 +1,185 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ShopNest shop-svc",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/products": {
+      "get": {
+        "tags": ["Shop"],
+        "operationId": "listProducts",
+        "parameters": [
+          { "name": "x-correlation-id", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Product" } } } }
+          }
+        }
+      },
+      "post": {
+        "tags": ["Shop"],
+        "operationId": "createProduct",
+        "parameters": [
+          { "name": "x-correlation-id", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CreateProductDto" } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Product" } } }
+          },
+          "400": { "description": "Bad Request" }
+        }
+      }
+    },
+    "/cart": {
+      "get": {
+        "tags": ["Cart"],
+        "operationId": "getCart",
+        "parameters": [
+          { "name": "x-user-id", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "x-correlation-id", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Cart" } } } },
+          "400": { "description": "Bad Request" }
+        }
+      }
+    },
+    "/cart/items": {
+      "post": {
+        "tags": ["Cart"],
+        "operationId": "addToCart",
+        "parameters": [
+          { "name": "x-user-id", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "x-correlation-id", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/AddToCartBody" } } }
+        },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Cart" } } } },
+          "400": { "description": "Bad Request" }
+        }
+      }
+    },
+    "/checkout": {
+      "post": {
+        "tags": ["Checkout"],
+        "operationId": "checkout",
+        "parameters": [
+          { "name": "x-user-id", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "x-correlation-id", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CheckoutResult" } } } },
+          "400": { "description": "Bad Request" }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "healthLive",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "status": { "type": "string", "example": "ok" } },
+                  "required": ["status"],
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "healthReady",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CreateProductDto": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "priceCents": { "type": "integer", "minimum": 0 },
+          "stock": { "type": "integer", "minimum": 0, "nullable": true }
+        },
+        "required": ["name", "priceCents"]
+      },
+      "Product": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "_id": { "type": "string", "nullable": true },
+          "id": { "type": "string", "nullable": true },
+          "name": { "type": "string" },
+          "description": { "type": "string", "nullable": true },
+          "priceCents": { "type": "integer" },
+          "stock": { "type": "integer", "nullable": true }
+        },
+        "required": ["name", "priceCents"]
+      },
+      "AddToCartBody": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "productId": { "type": "string" },
+          "qty": { "type": "integer", "minimum": 1 }
+        },
+        "required": ["productId", "qty"]
+      },
+      "CartItem": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "productId": { "type": "string" },
+          "qty": { "type": "integer" },
+          "priceCents": { "type": "integer", "nullable": true }
+        },
+        "required": ["productId", "qty"]
+      },
+      "Cart": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "userId": { "type": "string" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/CartItem" } }
+        },
+        "required": ["id", "userId", "items"]
+      },
+      "CheckoutResult": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "accepted": { "type": "boolean" },
+          "correlationId": { "type": "string" },
+          "cartId": { "type": "string" },
+          "channel": { "type": "string" }
+        },
+        "required": ["accepted", "correlationId", "cartId", "channel"]
+      }
+    }
+  }
+}
+

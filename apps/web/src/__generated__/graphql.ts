@@ -46,13 +46,24 @@ export type CheckoutResultGql = {
   correlationId: Scalars['String']['output'];
 };
 
+export type CreateTaskInputGql = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  dueDate?: InputMaybe<Scalars['String']['input']>;
+  priority?: InputMaybe<TaskPriority>;
+  status?: InputMaybe<TaskStatus>;
+  title: Scalars['String']['input'];
+};
+
 export type Mutation = {
   __typename?: 'Mutation';
   addToCart: CartGql;
   checkout: CheckoutResultGql;
   createProduct: ProductGql;
+  createTask: TaskGql;
+  deleteTask: Scalars['Boolean']['output'];
   login: AuthPayloadGql;
   register: AuthPayloadGql;
+  updateTask: TaskGql;
 };
 
 export type MutationAddToCartArgs = {
@@ -67,6 +78,14 @@ export type MutationCreateProductArgs = {
   stock?: InputMaybe<Scalars['Int']['input']>;
 };
 
+export type MutationCreateTaskArgs = {
+  input: CreateTaskInputGql;
+};
+
+export type MutationDeleteTaskArgs = {
+  id: Scalars['String']['input'];
+};
+
 export type MutationLoginArgs = {
   email: Scalars['String']['input'];
   password: Scalars['String']['input'];
@@ -76,6 +95,11 @@ export type MutationRegisterArgs = {
   displayName?: InputMaybe<Scalars['String']['input']>;
   email: Scalars['String']['input'];
   password: Scalars['String']['input'];
+};
+
+export type MutationUpdateTaskArgs = {
+  id: Scalars['String']['input'];
+  input: UpdateTaskInputGql;
 };
 
 export type OrderGql = {
@@ -112,10 +136,65 @@ export type Query = {
   order?: Maybe<OrderGql>;
   orders: Array<OrderGql>;
   products: Array<ProductGql>;
+  task?: Maybe<TaskGql>;
+  tasks: TasksPageGql;
 };
 
 export type QueryOrderArgs = {
   id: Scalars['String']['input'];
+};
+
+export type QueryTaskArgs = {
+  id: Scalars['String']['input'];
+};
+
+export type QueryTasksArgs = {
+  page?: InputMaybe<Scalars['Int']['input']>;
+  pageSize?: InputMaybe<Scalars['Int']['input']>;
+  priority?: InputMaybe<TaskPriority>;
+  q?: InputMaybe<Scalars['String']['input']>;
+  status?: InputMaybe<TaskStatus>;
+};
+
+export type TaskGql = {
+  __typename?: 'TaskGql';
+  createdAt: Scalars['String']['output'];
+  description?: Maybe<Scalars['String']['output']>;
+  dueDate?: Maybe<Scalars['String']['output']>;
+  id: Scalars['String']['output'];
+  priority: TaskPriority;
+  status: TaskStatus;
+  title: Scalars['String']['output'];
+  updatedAt: Scalars['String']['output'];
+};
+
+export enum TaskPriority {
+  High = 'High',
+  Low = 'Low',
+  Medium = 'Medium',
+}
+
+export enum TaskStatus {
+  Done = 'Done',
+  InProgress = 'InProgress',
+  Todo = 'Todo',
+}
+
+export type TasksPageGql = {
+  __typename?: 'TasksPageGql';
+  items: Array<TaskGql>;
+  page: Scalars['Float']['output'];
+  pageSize: Scalars['Float']['output'];
+  totalItems: Scalars['Float']['output'];
+  totalPages: Scalars['Float']['output'];
+};
+
+export type UpdateTaskInputGql = {
+  description?: InputMaybe<Scalars['String']['input']>;
+  dueDate?: InputMaybe<Scalars['String']['input']>;
+  priority: TaskPriority;
+  status: TaskStatus;
+  title: Scalars['String']['input'];
 };
 
 export type UserGql = {
@@ -198,6 +277,51 @@ export type CreateProductMutation = {
   };
 };
 
+export type CreateTaskMutationVariables = Exact<{
+  input: CreateTaskInputGql;
+}>;
+
+export type CreateTaskMutation = {
+  __typename?: 'Mutation';
+  createTask: {
+    __typename?: 'TaskGql';
+    id: string;
+    title: string;
+    description?: string | null;
+    status: TaskStatus;
+    priority: TaskPriority;
+    dueDate?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+};
+
+export type UpdateTaskMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+  input: UpdateTaskInputGql;
+}>;
+
+export type UpdateTaskMutation = {
+  __typename?: 'Mutation';
+  updateTask: {
+    __typename?: 'TaskGql';
+    id: string;
+    title: string;
+    description?: string | null;
+    status: TaskStatus;
+    priority: TaskPriority;
+    dueDate?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  };
+};
+
+export type DeleteTaskMutationVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+export type DeleteTaskMutation = { __typename?: 'Mutation'; deleteTask: boolean };
+
 export type ProductsQueryVariables = Exact<{ [key: string]: never }>;
 
 export type ProductsQuery = {
@@ -233,6 +357,55 @@ export type OrdersQuery = {
     status: string;
     lines: Array<{ __typename?: 'OrderLineGql'; productId: string; quantity: number }>;
   }>;
+};
+
+export type TasksQueryVariables = Exact<{
+  page?: InputMaybe<Scalars['Int']['input']>;
+  pageSize?: InputMaybe<Scalars['Int']['input']>;
+  status?: InputMaybe<TaskStatus>;
+  priority?: InputMaybe<TaskPriority>;
+  q?: InputMaybe<Scalars['String']['input']>;
+}>;
+
+export type TasksQuery = {
+  __typename?: 'Query';
+  tasks: {
+    __typename?: 'TasksPageGql';
+    page: number;
+    pageSize: number;
+    totalItems: number;
+    totalPages: number;
+    items: Array<{
+      __typename?: 'TaskGql';
+      id: string;
+      title: string;
+      description?: string | null;
+      status: TaskStatus;
+      priority: TaskPriority;
+      dueDate?: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  };
+};
+
+export type TaskQueryVariables = Exact<{
+  id: Scalars['String']['input'];
+}>;
+
+export type TaskQuery = {
+  __typename?: 'Query';
+  task?: {
+    __typename?: 'TaskGql';
+    id: string;
+    title: string;
+    description?: string | null;
+    status: TaskStatus;
+    priority: TaskPriority;
+    dueDate?: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
 };
 
 export const LoginDocument = {
@@ -548,6 +721,153 @@ export const CreateProductDocument = {
     },
   ],
 } as unknown as DocumentNode<CreateProductMutation, CreateProductMutationVariables>;
+export const CreateTaskDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'CreateTask' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'CreateTaskInputGql' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'createTask' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'dueDate' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<CreateTaskMutation, CreateTaskMutationVariables>;
+export const UpdateTaskDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'UpdateTask' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+          },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'UpdateTaskInputGql' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'updateTask' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'id' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'input' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'input' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'dueDate' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<UpdateTaskMutation, UpdateTaskMutationVariables>;
+export const DeleteTaskDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'mutation',
+      name: { kind: 'Name', value: 'DeleteTask' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'deleteTask' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'id' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+              },
+            ],
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<DeleteTaskMutation, DeleteTaskMutationVariables>;
 export const ProductsDocument = {
   kind: 'Document',
   definitions: [
@@ -650,3 +970,151 @@ export const OrdersDocument = {
     },
   ],
 } as unknown as DocumentNode<OrdersQuery, OrdersQueryVariables>;
+export const TasksDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'Tasks' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'page' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'pageSize' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'Int' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'status' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'TaskStatus' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'priority' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'TaskPriority' } },
+        },
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+          type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'tasks' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'page' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'page' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'pageSize' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'pageSize' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'status' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'status' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'priority' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'priority' } },
+              },
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'q' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'q' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                {
+                  kind: 'Field',
+                  name: { kind: 'Name', value: 'items' },
+                  selectionSet: {
+                    kind: 'SelectionSet',
+                    selections: [
+                      { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'dueDate' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                      { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+                    ],
+                  },
+                },
+                { kind: 'Field', name: { kind: 'Name', value: 'page' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'pageSize' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'totalItems' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'totalPages' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<TasksQuery, TasksQueryVariables>;
+export const TaskDocument = {
+  kind: 'Document',
+  definitions: [
+    {
+      kind: 'OperationDefinition',
+      operation: 'query',
+      name: { kind: 'Name', value: 'Task' },
+      variableDefinitions: [
+        {
+          kind: 'VariableDefinition',
+          variable: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+          type: {
+            kind: 'NonNullType',
+            type: { kind: 'NamedType', name: { kind: 'Name', value: 'String' } },
+          },
+        },
+      ],
+      selectionSet: {
+        kind: 'SelectionSet',
+        selections: [
+          {
+            kind: 'Field',
+            name: { kind: 'Name', value: 'task' },
+            arguments: [
+              {
+                kind: 'Argument',
+                name: { kind: 'Name', value: 'id' },
+                value: { kind: 'Variable', name: { kind: 'Name', value: 'id' } },
+              },
+            ],
+            selectionSet: {
+              kind: 'SelectionSet',
+              selections: [
+                { kind: 'Field', name: { kind: 'Name', value: 'id' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'title' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'description' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'status' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'priority' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'dueDate' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'createdAt' } },
+                { kind: 'Field', name: { kind: 'Name', value: 'updatedAt' } },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  ],
+} as unknown as DocumentNode<TaskQuery, TaskQueryVariables>;

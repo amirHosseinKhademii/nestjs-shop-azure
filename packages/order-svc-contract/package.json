@@ -1,0 +1,33 @@
+{
+  "name": "@shop/order-svc-contract",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./openapi/order-svc.openapi.json": "./openapi/order-svc.openapi.json",
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "openapi", "src/generated"],
+  "scripts": {
+    "codegen": "openapi-typescript openapi/order-svc.openapi.json -o src/generated/schema.ts",
+    "prebuild": "pnpm run codegen",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src --ext .ts --ignore-pattern 'src/generated/**' || true",
+    "typecheck": "pnpm run codegen && tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "openapi-typescript": "^7.6.1",
+    "typescript": "^5.7.2"
+  }
+}
+

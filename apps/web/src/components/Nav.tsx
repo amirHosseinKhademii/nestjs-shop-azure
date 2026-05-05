@@ -34,6 +34,11 @@ export function Nav() {
             Orders
           </NavLink>
         </li>
+        <li>
+          <NavLink to="/tasks" className={({ isActive }) => (isActive ? 'is-active' : '')}>
+            Tasks
+          </NavLink>
+        </li>
       </ul>
       <div className="nav__actions">
         {isAuthenticated ? (
