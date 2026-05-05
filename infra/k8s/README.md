@@ -229,6 +229,7 @@ Secrets. Rotation = update the GitHub Secret + re-run the `CD` workflow.
 | Variable | `AWS_REGION` | e.g. `eu-west-1` | `aws eks update-kubeconfig` |
 | Secret | `AWS_ROLE_TO_ASSUME` | IAM role ARN trusted by `token.actions.githubusercontent.com` for this repo | OIDC assume |
 | Secret | `DATABASE_URL` | Neon Postgres connection string | `user-svc`, `order-svc` |
+| Secret | `TASK_DATABASE_URL` | Postgres connection string for tasks | `task-svc` |
 | Secret | `MONGO_URI` | Atlas connection string | `shop-svc` |
 | Secret | `REDIS_URL` | Upstash `rediss://…` | `shop-svc` cart |
 | Secret | `JWT_SECRET` | `openssl rand -base64 48` output | `api-gateway`, `user-svc` |
