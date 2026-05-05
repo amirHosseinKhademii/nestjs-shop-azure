@@ -46,6 +46,22 @@ kind: Kustomization
 resources:
   - ../../k8s
 
+# For local dev we generally want the newest pushed images. The production base
+# pins to immutable short-SHA tags; this overlay overrides them to `main`.
+images:
+  - name: docker.io/amir2575/shop-api-gateway
+    newTag: main
+  - name: docker.io/amir2575/shop-user-svc
+    newTag: main
+  - name: docker.io/amir2575/shop-shop-svc
+    newTag: main
+  - name: docker.io/amir2575/shop-order-svc
+    newTag: main
+  - name: docker.io/amir2575/shop-task-svc
+    newTag: main
+  - name: docker.io/amir2575/shop-web
+    newTag: main
+
 patches:
   # ── Loosen the Ingress for an HTTP-only / no-DNS environment ───────────
   - target:
@@ -77,6 +93,52 @@ patches:
       - op: replace
         path: /spec/replicas
         value: 1
+
+  # ── Force a fresh image pull on every Pod restart ──────────────────────
+  # Minikube reuses cached images by default (`IfNotPresent`). When you want
+  # "always pull whatever is currently in the registry tag", flip to `Always`.
+  - target:
+      kind: Deployment
+      name: api-gateway
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Deployment
+      name: user-svc
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Deployment
+      name: shop-svc
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Deployment
+      name: order-svc
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Deployment
+      name: task-svc
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+  - target:
+      kind: Deployment
+      name: web
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
 
   # ── Loosen NetworkPolicy egress so pods can reach external SaaS used in
   #    the prototype (Aiven Kafka uses a non-443 port; Atlas SRV lookups
