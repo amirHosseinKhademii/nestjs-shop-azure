@@ -58,7 +58,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SERVICES: '["api-gateway","user-svc","shop-svc","order-svc","web"]'
+  SERVICES: '["api-gateway","user-svc","shop-svc","order-svc","task-svc","web"]'
 
 jobs:
   # ─── Stage 1 ─ Workspace-level format check ───────────────────────────────
@@ -85,16 +85,15 @@ jobs:
             echo "Workspace-wide \`prettier --check\` completed with status **${{ job.status }}**."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ─── Stage 2 ─ Per-service lint + typecheck + test ────────────────────────
-  verify:
-    name: Verify · ${{ matrix.service }}
+  # ─── Stage 1.5 ─ OpenAPI contract drift guard ─────────────────────────────
+  #
+  # Ensures checked-in OpenAPI JSON ↔ generated TS types stay aligned.
+  # This is CI-safe (no service boot / no pulling from localhost).
+  openapi:
+    name: OpenAPI · drift guard
     needs: format
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -104,7 +103,46 @@ jobs:
       - name: Setup Node 24 + pnpm + install
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: OpenAPI JSON ↔ generated types
+        run: pnpm run openapi:check
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## OpenAPI drift guard"
+            echo ""
+            echo "Verified OpenAPI contracts ↔ generated TS types → **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ─── Stage 2 ─ Per-service lint + typecheck + test ────────────────────────
+  verify:
+    name: Verify · ${{ matrix.service }}
+    needs: openapi
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, web]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 2
+
+      - name: Setup Node 24 + pnpm + install
+        if: matrix.service != 'task-svc'
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Setup .NET 10
+        if: matrix.service == 'task-svc'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Restore Turbo cache
+        if: matrix.service != 'task-svc'
         uses: actions/cache@v5
         with:
           path: .turbo
@@ -113,7 +151,35 @@ jobs:
             turbo-${{ runner.os }}-${{ matrix.service }}-
 
       - name: Lint + typecheck + test (turbo)
+        if: matrix.service != 'task-svc'
         run: pnpm exec turbo run lint typecheck test --filter=@shop/${{ matrix.service }}
+
+      - name: Cache NuGet packages
+        if: matrix.service == 'task-svc'
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('apps/task-svc/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore (.NET)
+        if: matrix.service == 'task-svc'
+        working-directory: apps/task-svc
+        run: dotnet restore
+
+      - name: Format check (.NET)
+        if: matrix.service == 'task-svc'
+        working-directory: apps/task-svc
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build (Release) + Test (.NET)
+        if: matrix.service == 'task-svc'
+        working-directory: apps/task-svc
+        run: |
+          set -euo pipefail
+          dotnet build -c Release --no-restore
+          dotnet test -c Release --no-build --verbosity minimal
 
       - name: Job summary
         if: always()
@@ -133,7 +199,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -141,9 +207,17 @@ jobs:
           fetch-depth: 2
 
       - name: Setup Node 24 + pnpm + install
+        if: matrix.service != 'task-svc'
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Setup .NET 10
+        if: matrix.service == 'task-svc'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Restore Turbo cache
+        if: matrix.service != 'task-svc'
         uses: actions/cache@v5
         with:
           path: .turbo
@@ -152,7 +226,25 @@ jobs:
             turbo-${{ runner.os }}-${{ matrix.service }}-
 
       - name: Build (turbo)
+        if: matrix.service != 'task-svc'
         run: pnpm exec turbo run build --filter=@shop/${{ matrix.service }}
+
+      - name: Cache NuGet packages
+        if: matrix.service == 'task-svc'
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('apps/task-svc/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore + build (Release) (.NET)
+        if: matrix.service == 'task-svc'
+        working-directory: apps/task-svc
+        run: |
+          set -euo pipefail
+          dotnet restore
+          dotnet build -c Release --no-restore
 
       - name: Job summary
         if: always()
@@ -163,7 +255,7 @@ jobs:
             echo "turbo build → **${{ job.status }}**"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ─── Stage 4 ─ GraphQL schema + codegen drift guard ───────────────────────
+  # ─── Stage 5 ─ GraphQL schema + codegen drift guard ───────────────────────
   #
   # The api-gateway is code-first: resolvers are the source of truth and
   # `apps/api-gateway/src/schema.gql` is regenerated at every dev boot. The
@@ -238,7 +330,7 @@ jobs:
   # ─── Rollup ─ Single required check for branch protection ─────────────────
   ci-summary:
     name: CI summary
-    needs: [format, verify, build, schema]
+    needs: [format, openapi, verify, build, schema]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 1
@@ -247,6 +339,7 @@ jobs:
         run: |
           set -euo pipefail
           F='${{ needs.format.result }}'
+          O='${{ needs.openapi.result }}'
           V='${{ needs.verify.result }}'
           B='${{ needs.build.result }}'
           S='${{ needs.schema.result }}'
@@ -256,12 +349,13 @@ jobs:
             echo "| Stage | Result |"
             echo "| --- | --- |"
             echo "| Format            | $F |"
-            echo "| Verify (matrix×5) | $V |"
-            echo "| Build  (matrix×5) | $B |"
+            echo "| OpenAPI drift     | $O |"
+            echo "| Verify (matrix×6) | $V |"
+            echo "| Build  (matrix×6) | $B |"
             echo "| Schema drift      | $S |"
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$F" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$S" != 'success' ]; then
-            echo "::error::At least one CI stage was not successful (format=$F verify=$V build=$B schema=$S)"
+          if [ "$F" != 'success' ] || [ "$O" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$S" != 'success' ]; then
+            echo "::error::At least one CI stage was not successful (format=$F openapi=$O verify=$V build=$B schema=$S)"
             exit 1
           fi
           echo "::notice::All CI stages passed."

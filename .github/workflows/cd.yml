@@ -68,7 +68,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, web]
     steps:
       - name: Resolve commit SHA + branch
         id: ctx
@@ -213,7 +213,7 @@ jobs:
           TAG: ${{ steps.tag.outputs.value }}
         run: |
           set -euo pipefail
-          for svc in api-gateway web user-svc shop-svc order-svc; do
+          for svc in api-gateway web user-svc shop-svc order-svc task-svc; do
             kustomize edit set image \
               "docker.io/${NS}/shop-${svc}=docker.io/${NS}/shop-${svc}:${TAG}"
           done

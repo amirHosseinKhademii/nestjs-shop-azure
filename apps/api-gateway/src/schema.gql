@@ -24,12 +24,23 @@ type CheckoutResultGql {
   correlationId: String!
 }
 
+input CreateTaskInputGql {
+  description: String
+  dueDate: String
+  priority: TaskPriority
+  status: TaskStatus
+  title: String!
+}
+
 type Mutation {
   addToCart(productId: String!, qty: Int!): CartGql!
   checkout: CheckoutResultGql!
   createProduct(description: String, name: String!, priceCents: Int!, stock: Int): ProductGql!
+  createTask(input: CreateTaskInputGql!): TaskGql!
+  deleteTask(id: String!): Boolean!
   login(email: String!, password: String!): AuthPayloadGql!
   register(displayName: String, email: String!, password: String!): AuthPayloadGql!
+  updateTask(id: String!, input: UpdateTaskInputGql!): TaskGql!
 }
 
 type OrderGql {
@@ -62,6 +73,47 @@ type Query {
   order(id: String!): OrderGql
   orders: [OrderGql!]!
   products: [ProductGql!]!
+  task(id: String!): TaskGql
+  tasks(page: Int, pageSize: Int, priority: TaskPriority, q: String, status: TaskStatus): TasksPageGql!
+}
+
+type TaskGql {
+  createdAt: String!
+  description: String
+  dueDate: String
+  id: String!
+  priority: TaskPriority!
+  status: TaskStatus!
+  title: String!
+  updatedAt: String!
+}
+
+enum TaskPriority {
+  High
+  Low
+  Medium
+}
+
+enum TaskStatus {
+  Done
+  InProgress
+  Todo
+}
+
+type TasksPageGql {
+  items: [TaskGql!]!
+  page: Float!
+  pageSize: Float!
+  totalItems: Float!
+  totalPages: Float!
+}
+
+input UpdateTaskInputGql {
+  description: String
+  dueDate: String
+  priority: TaskPriority!
+  status: TaskStatus!
+  title: String!
 }
 
 type UserGql {

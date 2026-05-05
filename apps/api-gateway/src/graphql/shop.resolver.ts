@@ -2,22 +2,28 @@ import { Resolver, Query, Mutation, Args, Context, Int } from '@nestjs/graphql';
 import { UnauthorizedException, UseGuards } from '@nestjs/common';
 import { GqlJwtGuard } from './gql-jwt.guard';
 import { ProductGql, CartGql, CheckoutResultGql } from './types';
-import { BackendHttpService } from '../backend-http.service';
-import type { GatewayGraphqlContext, ShopProductDto } from './graphql-context';
+import { BackendContractsService } from '../contracts/backend-contracts.service';
+import { unwrapOrThrow } from '../contracts/openapi-helpers';
+import type { GatewayGraphqlContext } from './graphql-context';
 
 @Resolver()
 export class ShopResolver {
-  constructor(private readonly backend: BackendHttpService) {}
+  constructor(private readonly backends: BackendContractsService) {}
 
   @Query(() => [ProductGql])
   async products(@Context() ctx: { correlationId?: string }) {
-    const raw = await this.backend.products(ctx.correlationId);
-    return (raw as ShopProductDto[]).map((p) => ({
-      id: String(p._id ?? p.id),
+    const res = await this.backends.shop.GET('/products', {
+      params: {
+        header: ctx?.correlationId ? { 'x-correlation-id': ctx.correlationId } : ({} as never),
+      },
+    });
+    const raw = unwrapOrThrow(res);
+    return raw.map((p) => ({
+      id: String((p as { _id?: string; id?: string })._id ?? (p as { id?: string }).id),
       name: p.name,
-      description: p.description,
+      description: (p as { description?: string | null }).description ?? undefined,
       priceCents: p.priceCents,
-      stock: p.stock,
+      stock: (p as { stock?: number | null }).stock ?? undefined,
     }));
   }
 
@@ -29,21 +35,19 @@ export class ShopResolver {
     @Args('stock', { nullable: true, type: () => Int }) stock?: number,
     @Context() ctx?: { correlationId?: string },
   ) {
-    const created = (await this.backend.createProduct(
-      {
-        name,
-        priceCents,
-        description,
-        stock,
+    const res = await this.backends.shop.POST('/products', {
+      body: { name, priceCents, description, stock },
+      params: {
+        header: ctx?.correlationId ? { 'x-correlation-id': ctx.correlationId } : ({} as never),
       },
-      ctx?.correlationId,
-    )) as ShopProductDto;
+    });
+    const created = unwrapOrThrow(res);
     return {
-      id: String(created._id ?? created.id),
+      id: String((created as { _id?: string; id?: string })._id ?? (created as { id?: string }).id),
       name: created.name,
-      description: created.description,
+      description: (created as { description?: string | null }).description ?? undefined,
       priceCents: created.priceCents,
-      stock: created.stock,
+      stock: (created as { stock?: number | null }).stock ?? undefined,
     };
   }
 
@@ -52,7 +56,15 @@ export class ShopResolver {
   async cart(@Context() ctx: GatewayGraphqlContext) {
     const userId = ctx.req.user?.sub;
     if (!userId) throw new UnauthorizedException();
-    return this.backend.cart(userId, ctx.correlationId) as Promise<CartGql>;
+    const res = await this.backends.shop.GET('/cart', {
+      params: {
+        header: {
+          'x-user-id': userId,
+          ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}),
+        },
+      },
+    });
+    return unwrapOrThrow(res) as CartGql;
   }
 
   @Mutation(() => CartGql)
@@ -64,11 +76,16 @@ export class ShopResolver {
   ) {
     const userId = ctx.req.user?.sub;
     if (!userId) throw new UnauthorizedException();
-    return this.backend.addToCart(
-      userId,
-      { productId, qty },
-      ctx.correlationId,
-    ) as Promise<CartGql>;
+    const res = await this.backends.shop.POST('/cart/items', {
+      body: { productId, qty },
+      params: {
+        header: {
+          'x-user-id': userId,
+          ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}),
+        },
+      },
+    });
+    return unwrapOrThrow(res) as CartGql;
   }
 
   @Mutation(() => CheckoutResultGql)
@@ -77,6 +94,14 @@ export class ShopResolver {
     const userId = ctx.req.user?.sub;
     if (!userId) throw new UnauthorizedException();
     const correlationId = ctx.req.correlationId ?? ctx.correlationId;
-    return this.backend.checkout(userId, correlationId) as Promise<CheckoutResultGql>;
+    const res = await this.backends.shop.POST('/checkout', {
+      params: {
+        header: {
+          'x-user-id': userId,
+          ...(correlationId ? { 'x-correlation-id': correlationId } : {}),
+        },
+      },
+    });
+    return unwrapOrThrow(res) as CheckoutResultGql;
   }
 }

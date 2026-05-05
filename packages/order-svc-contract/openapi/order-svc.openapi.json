@@ -1,0 +1,144 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ShopNest order-svc",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/orders": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "listOrders",
+        "parameters": [
+          { "name": "x-user-id", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "x-correlation-id", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": { "application/json": { "schema": { "type": "array", "items": { "$ref": "#/components/schemas/Order" } } } }
+          },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "getOrder",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } },
+          { "name": "x-user-id", "in": "header", "required": true, "schema": { "type": "string" } },
+          { "name": "x-correlation-id", "in": "header", "required": false, "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Order" } } } },
+          "401": { "description": "Unauthorized" },
+          "404": { "description": "Not Found" }
+        }
+      }
+    },
+    "/internal/checkout": {
+      "post": {
+        "tags": ["Internal"],
+        "operationId": "internalCheckout",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CheckoutEvent" } } }
+        },
+        "responses": {
+          "200": { "description": "OK", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/InternalCheckoutResult" } } } }
+        }
+      }
+    },
+    "/health/live": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "healthLive",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": { "status": { "type": "string", "example": "ok" } },
+                  "required": ["status"],
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "tags": ["Health"],
+        "operationId": "healthReady",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "OrderLine": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "productId": { "type": "string" },
+          "quantity": { "type": "integer" },
+          "priceCents": { "type": "integer" }
+        },
+        "required": ["id", "productId", "quantity", "priceCents"]
+      },
+      "Order": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "userId": { "type": "string" },
+          "cartId": { "type": "string" },
+          "correlationId": { "type": "string" },
+          "status": { "type": "string" },
+          "lines": { "type": "array", "items": { "$ref": "#/components/schemas/OrderLine" } }
+        },
+        "required": ["id", "userId", "cartId", "correlationId", "status", "lines"]
+      },
+      "CheckoutEventPayload": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "productIds": { "type": "array", "items": { "type": "string" } },
+          "quantities": { "type": "array", "items": { "type": "integer", "minimum": 1 } }
+        },
+        "required": ["productIds", "quantities"]
+      },
+      "CheckoutEvent": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "eventType": { "type": "string", "enum": ["CheckoutRequested"] },
+          "schemaVersion": { "type": "integer", "enum": [1] },
+          "occurredAt": { "type": "string" },
+          "correlationId": { "type": "string" },
+          "userId": { "type": "string" },
+          "cartId": { "type": "string" },
+          "payload": { "$ref": "#/components/schemas/CheckoutEventPayload" }
+        },
+        "required": ["eventType", "schemaVersion", "occurredAt", "correlationId", "userId", "cartId", "payload"]
+      },
+      "InternalCheckoutResult": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "orderId": { "type": "string" },
+          "correlationId": { "type": "string" }
+        },
+        "required": ["orderId", "correlationId"]
+      }
+    }
+  }
+}
+

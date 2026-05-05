@@ -2,12 +2,13 @@ import { Resolver, Mutation, Args, Query, Context } from '@nestjs/graphql';
 import { UnauthorizedException, UseGuards } from '@nestjs/common';
 import { GqlJwtGuard } from './gql-jwt.guard';
 import { AuthPayloadGql, UserGql } from './types';
-import { BackendHttpService } from '../backend-http.service';
+import { BackendContractsService } from '../contracts/backend-contracts.service';
+import { unwrapOrThrow } from '../contracts/openapi-helpers';
 import type { GatewayGraphqlContext } from './graphql-context';
 
 @Resolver()
 export class AuthResolver {
-  constructor(private readonly backend: BackendHttpService) {}
+  constructor(private readonly backends: BackendContractsService) {}
 
   @Mutation(() => AuthPayloadGql)
   async register(
@@ -16,10 +17,13 @@ export class AuthResolver {
     @Args('displayName', { nullable: true }) displayName?: string,
     @Context() ctx?: { correlationId?: string },
   ) {
-    return this.backend.register(
-      { email, password, displayName },
-      ctx?.correlationId,
-    ) as Promise<AuthPayloadGql>;
+    const res = await this.backends.user.POST('/auth/register', {
+      body: { email, password, displayName },
+      params: {
+        header: ctx?.correlationId ? { 'x-correlation-id': ctx.correlationId } : ({} as never),
+      },
+    });
+    return unwrapOrThrow(res) as AuthPayloadGql;
   }
 
   @Mutation(() => AuthPayloadGql)
@@ -28,7 +32,13 @@ export class AuthResolver {
     @Args('password') password: string,
     @Context() ctx?: { correlationId?: string },
   ) {
-    return this.backend.login({ email, password }, ctx?.correlationId) as Promise<AuthPayloadGql>;
+    const res = await this.backends.user.POST('/auth/login', {
+      body: { email, password },
+      params: {
+        header: ctx?.correlationId ? { 'x-correlation-id': ctx.correlationId } : ({} as never),
+      },
+    });
+    return unwrapOrThrow(res) as AuthPayloadGql;
   }
 
   @Query(() => UserGql)
@@ -36,6 +46,14 @@ export class AuthResolver {
   async me(@Context() ctx: GatewayGraphqlContext) {
     const userId = ctx.req.user?.sub;
     if (!userId) throw new UnauthorizedException();
-    return this.backend.me(userId, ctx.correlationId) as Promise<UserGql>;
+    const res = await this.backends.user.GET('/auth/me', {
+      params: {
+        header: {
+          'x-user-id': userId,
+          ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}),
+        },
+      },
+    });
+    return unwrapOrThrow(res) as UserGql;
   }
 }

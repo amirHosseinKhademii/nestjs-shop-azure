@@ -20,6 +20,7 @@ resources:
 - user-svc.yaml
 - shop-svc.yaml
 - order-svc.yaml
+- task-svc.yaml
 - api-gateway.yaml
 - web.yaml
 - ingress.yaml
@@ -35,7 +36,10 @@ resources:
 images:
 - name: docker.io/amir2575/shop-api-gateway
   newName: docker.io/amir2575/shop-api-gateway
-  newTag: sha-f720cf2
+  newTag: sha-b1e762a
+- name: docker.io/amir2575/shop-task-svc
+  newName: docker.io/amir2575/shop-task-svc
+  newTag: sha-b1e762a
 - name: docker.io/amir2575/shop-order-svc
   newName: docker.io/amir2575/shop-order-svc
   newTag: sha-f720cf2

@@ -56,6 +56,8 @@ spec:
               value: http://shop-svc:3002
             - name: ORDER_SVC_URL
               value: http://order-svc:3003
+            - name: TASK_SVC_URL
+              value: http://task-svc:3004
             - name: OTEL_SERVICE_NAME
               value: api-gateway
             - name: OTEL_EXPORTER_OTLP_ENDPOINT

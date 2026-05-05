@@ -1,0 +1,11 @@
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/.idea
+**/Migrations/*.designer.cs
+*.user
+*.suo
+.env
+.env.*
+README.md

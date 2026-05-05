@@ -10,6 +10,7 @@
 #   api-gateway ─▶ user-svc :3001
 #               ─▶ shop-svc :3002
 #               ─▶ order-svc :3003
+#               ─▶ task-svc :3004
 #   shop-svc ─▶ order-svc :3003   (HTTP checkout fallback)
 #   {user,shop,order}-svc ─▶ public internet (Neon / Atlas / Upstash / Service Bus)
 #
@@ -135,6 +136,61 @@ spec:
       ports:
         - protocol: TCP
           port: 3003
+    - to:
+        - podSelector:
+            matchLabels:
+              app: task-svc
+      ports:
+        - protocol: TCP
+          port: 3004
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchLabels:
+              app: alloy
+      ports:
+        - protocol: TCP
+          port: 4317
+        - protocol: TCP
+          port: 4318
+
+---
+# task-svc: ingress only from api-gateway, egress to Postgres (+ optional Redis) and HTTPS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: task-svc
+  namespace: shop
+spec:
+  podSelector:
+    matchLabels:
+      app: task-svc
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api-gateway
+      ports:
+        - protocol: TCP
+          port: 3004
+  egress:
+    # Postgres (public internet, TLS).
+    - ports:
+        - protocol: TCP
+          port: 5432
+    # Optional Redis (Upstash, TLS).
+    - ports:
+        - protocol: TCP
+          port: 6379
+    # Generic HTTPS (Kafka/Redis/Postgres control planes, etc).
+    - ports:
+        - protocol: TCP
+          port: 443
     - to:
         - namespaceSelector:
             matchLabels:

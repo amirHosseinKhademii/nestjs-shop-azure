@@ -1,0 +1,104 @@
+# task-svc (.NET): internal-only CRUD service consumed by api-gateway.
+#
+# Storage is external Postgres (TASK_DATABASE_URL from shop-app-secrets).
+# Redis/Kafka are optional; when unset the service still serves REST.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: task-svc
+  namespace: shop
+  labels:
+    app: task-svc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: task-svc
+  template:
+    metadata:
+      labels:
+        app: task-svc
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1654
+        runAsGroup: 1654
+        fsGroup: 1654
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: task-svc
+          image: docker.io/amir2575/shop-task-svc:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3004
+          envFrom:
+            - secretRef:
+                name: shop-app-secrets
+          env:
+            - name: ASPNETCORE_HTTP_PORTS
+              value: "3004"
+            - name: ASPNETCORE_ENVIRONMENT
+              value: Production
+            # Keep the OpenAPI document off in prod unless explicitly enabled.
+            - name: OpenApi__DocumentEnabled
+              value: "false"
+            - name: OTEL_SERVICE_NAME
+              value: task-svc
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.observability.svc.cluster.local:4318
+            - name: OBS_ENABLED
+              value: "true"
+            - name: OTEL_TRACES_SAMPLER
+              value: parentbased_traceidratio
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: "0.1"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: task-svc
+  namespace: shop
+spec:
+  type: ClusterIP
+  selector:
+    app: task-svc
+  ports:
+    - name: http
+      port: 3004
+      targetPort: http
+

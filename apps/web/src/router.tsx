@@ -10,6 +10,7 @@ import { RegisterPage } from './pages/RegisterPage';
 import { ProductsPage } from './pages/product';
 import { CartPage } from './pages/CartPage';
 import { OrdersPage } from './pages/OrdersPage';
+import { TasksPage } from './pages/TasksPage';
 
 export function createAppRouter() {
   const router = createBrowserRouter([
@@ -33,6 +34,14 @@ export function createAppRouter() {
           element: (
             <RequireAuth>
               <OrdersPage />
+            </RequireAuth>
+          ),
+        },
+        {
+          path: 'tasks',
+          element: (
+            <RequireAuth>
+              <TasksPage />
             </RequireAuth>
           ),
         },

@@ -206,7 +206,7 @@ minikube delete
 | 7 | Pod `CreateContainerConfigError` with `secret "shop-app-secrets" not found` | You ran `kubectl apply -k` before `seed-secrets.mjs`. Run `seed-secrets.mjs`, then `kubectl -n shop rollout restart deploy` to recreate the pods against the new Secret. |
 | 8 | `404` from `http://shop.local/` | `minikube ip` doesn't match `/etc/hosts`. Re-run `minikube ip` and update the hosts entry. |
 | 9 | `Kafka producer connect failed: ECONNREFUSED` in shop-svc | Aiven service is auto-suspended (free tier sleeps after 24h idle). Power it back on in the Aiven console. |
-| 10 | `This server does not host this topic-partition` | Topic `checkout-events` doesn't exist on Aiven. Run `node scripts/ensure-kafka-topic.mjs` from the repo root. |
+| 10 | `This server does not host this topic-partition` | Required topic missing on Aiven (e.g. `checkout-events` or `order-events`). Run `pnpm kafka:topics` or `node scripts/ensure-kafka-topic.mjs` from the repo root. |
 | 11 | Pods can't reach Aiven (`ETIMEDOUT` to `*.aivencloud.com:27782`) | You started Minikube with `--cni=calico` and the NetworkPolicy isn't allowing port 27782. The overlay already adds that port; if you've further customised the policy, double-check the `shop-svc` and `order-svc` `egress:` blocks. |
 
 
