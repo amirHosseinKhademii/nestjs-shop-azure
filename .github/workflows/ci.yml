@@ -58,7 +58,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SERVICES: '["api-gateway","user-svc","shop-svc","order-svc","web"]'
+  SERVICES: '["api-gateway","user-svc","shop-svc","order-svc","task-svc","web"]'
 
 jobs:
   # ─── Stage 1 ─ Workspace-level format check ───────────────────────────────
@@ -124,7 +124,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -132,9 +132,17 @@ jobs:
           fetch-depth: 2
 
       - name: Setup Node 24 + pnpm + install
+        if: matrix.service != 'task-svc'
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Setup .NET 10
+        if: matrix.service == 'task-svc'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Restore Turbo cache
+        if: matrix.service != 'task-svc'
         uses: actions/cache@v5
         with:
           path: .turbo
@@ -143,7 +151,35 @@ jobs:
             turbo-${{ runner.os }}-${{ matrix.service }}-
 
       - name: Lint + typecheck + test (turbo)
+        if: matrix.service != 'task-svc'
         run: pnpm exec turbo run lint typecheck test --filter=@shop/${{ matrix.service }}
+
+      - name: Cache NuGet packages
+        if: matrix.service == 'task-svc'
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('apps/task-svc/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore (.NET)
+        if: matrix.service == 'task-svc'
+        working-directory: apps/task-svc
+        run: dotnet restore
+
+      - name: Format check (.NET)
+        if: matrix.service == 'task-svc'
+        working-directory: apps/task-svc
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build (Release) + Test (.NET)
+        if: matrix.service == 'task-svc'
+        working-directory: apps/task-svc
+        run: |
+          set -euo pipefail
+          dotnet build -c Release --no-restore
+          dotnet test -c Release --no-build --verbosity minimal
 
       - name: Job summary
         if: always()
@@ -163,7 +199,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc, web]
+        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -171,9 +207,17 @@ jobs:
           fetch-depth: 2
 
       - name: Setup Node 24 + pnpm + install
+        if: matrix.service != 'task-svc'
         uses: ./.github/actions/setup-pnpm-node
 
+      - name: Setup .NET 10
+        if: matrix.service == 'task-svc'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
       - name: Restore Turbo cache
+        if: matrix.service != 'task-svc'
         uses: actions/cache@v5
         with:
           path: .turbo
@@ -182,7 +226,25 @@ jobs:
             turbo-${{ runner.os }}-${{ matrix.service }}-
 
       - name: Build (turbo)
+        if: matrix.service != 'task-svc'
         run: pnpm exec turbo run build --filter=@shop/${{ matrix.service }}
+
+      - name: Cache NuGet packages
+        if: matrix.service == 'task-svc'
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('apps/task-svc/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore + build (Release) (.NET)
+        if: matrix.service == 'task-svc'
+        working-directory: apps/task-svc
+        run: |
+          set -euo pipefail
+          dotnet restore
+          dotnet build -c Release --no-restore
 
       - name: Job summary
         if: always()
@@ -191,60 +253,6 @@ jobs:
             echo "## Build · \`${{ matrix.service }}\`"
             echo ""
             echo "turbo build → **${{ job.status }}**"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # ─── Stage 4 ─ task-svc (.NET 10) verify + build ─────────────────────────
-  #
-  # Standalone .NET service. Lives outside the pnpm/turbo graph so it gets
-  # its own job rather than a row in the matrix above. Steps mirror the Node
-  # services' Verify→Build flow: format → restore → build → test.
-  dotnet:
-    name: Verify+Build · task-svc
-    needs: openapi
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: apps/task-svc
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup .NET 10
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0.x'
-
-      - name: Cache NuGet packages
-        uses: actions/cache@v5
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('apps/task-svc/**/*.csproj') }}
-          restore-keys: |
-            nuget-${{ runner.os }}-
-
-      - name: Restore
-        run: dotnet restore
-
-      - name: Format check
-        run: dotnet format --verify-no-changes --no-restore
-
-      - name: Build (Release, warnings as errors)
-        run: dotnet build -c Release --no-restore
-
-      - name: Test
-        # `dotnet test` exits 0 when no test projects are discovered, so
-        # this is a no-op until the first test project is added — at which
-        # point CI starts enforcing it without any workflow change.
-        run: dotnet test -c Release --no-build --verbosity minimal
-
-      - name: Job summary
-        if: always()
-        run: |
-          {
-            echo "## task-svc (.NET 10)"
-            echo ""
-            echo "format → restore → build → test → **${{ job.status }}**"
           } >> "$GITHUB_STEP_SUMMARY"
 
   # ─── Stage 5 ─ GraphQL schema + codegen drift guard ───────────────────────
@@ -322,7 +330,7 @@ jobs:
   # ─── Rollup ─ Single required check for branch protection ─────────────────
   ci-summary:
     name: CI summary
-    needs: [format, openapi, verify, build, dotnet, schema]
+    needs: [format, openapi, verify, build, schema]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 1
@@ -334,7 +342,6 @@ jobs:
           O='${{ needs.openapi.result }}'
           V='${{ needs.verify.result }}'
           B='${{ needs.build.result }}'
-          D='${{ needs.dotnet.result }}'
           S='${{ needs.schema.result }}'
           {
             echo "# CI rollup"
@@ -343,13 +350,12 @@ jobs:
             echo "| --- | --- |"
             echo "| Format            | $F |"
             echo "| OpenAPI drift     | $O |"
-            echo "| Verify (matrix×5) | $V |"
-            echo "| Build  (matrix×5) | $B |"
-            echo "| task-svc (.NET)   | $D |"
+            echo "| Verify (matrix×6) | $V |"
+            echo "| Build  (matrix×6) | $B |"
             echo "| Schema drift      | $S |"
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$F" != 'success' ] || [ "$O" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$D" != 'success' ] || [ "$S" != 'success' ]; then
-            echo "::error::At least one CI stage was not successful (format=$F openapi=$O verify=$V build=$B dotnet=$D schema=$S)"
+          if [ "$F" != 'success' ] || [ "$O" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$S" != 'success' ]; then
+            echo "::error::At least one CI stage was not successful (format=$F openapi=$O verify=$V build=$B schema=$S)"
             exit 1
           fi
           echo "::notice::All CI stages passed."
