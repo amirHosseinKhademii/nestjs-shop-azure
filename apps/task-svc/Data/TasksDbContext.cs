@@ -11,34 +11,10 @@ public sealed class TasksDbContext(DbContextOptions<TasksDbContext> options) : D
     {
         base.OnModelCreating(modelBuilder);
 
-        modelBuilder.Entity<TaskItem>(entity =>
-        {
-            entity.HasKey(t => t.Id);
-
-            entity.Property(t => t.Title).IsRequired().HasMaxLength(200);
-
-            entity.Property(t => t.Description).HasMaxLength(2000);
-
-            entity
-                .Property(t => t.Status)
-                .HasConversion<string>()
-                .HasMaxLength(32)
-                .IsRequired();
-
-            entity
-                .Property(t => t.Priority)
-                .HasConversion<string>()
-                .HasMaxLength(16)
-                .IsRequired();
-
-            entity.Property(t => t.CreatedAt).IsRequired();
-            entity.Property(t => t.UpdatedAt).IsRequired();
-
-            entity.Property(t => t.Xmin).IsRowVersion().HasColumnName("xmin");
-
-            entity.HasIndex(t => t.Status);
-            entity.HasIndex(t => t.DueDate);
-            entity.HasIndex(t => t.CreatedAt);
-        });
+        // Discover every IEntityTypeConfiguration<T> in this assembly and
+        // apply it. Adding a new entity is a one-file change (a new
+        // *Configuration.cs under Data/Configurations/) — the DbContext
+        // never has to grow.
+        modelBuilder.ApplyConfigurationsFromAssembly(typeof(TasksDbContext).Assembly);
     }
 }

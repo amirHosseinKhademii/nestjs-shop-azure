@@ -14,13 +14,18 @@ root `.env`, and `pnpm dev:task` boots the server.
 
 ```
 apps/task-svc/
+├── Caching/            # ITaskCache + Redis/in-memory cache-aside layer + AddTaskCache()
 ├── Controllers/        # HTTP surface — controllers map URLs to ITaskService
-├── Data/               # DbContext, design-time factory, migrations
+├── Data/               # DbContext, design-time factory, migrations + AddTasksDatabase()
 ├── Domain/             # TaskItem entity + enums (status, priority)
 ├── Dtos/               # Request/response shapes (separate from entities)
+├── Hosting/            # Cross-cutting host plumbing: env loader, CORS, ProblemDetails,
+│                       #   health writer, dev-time migration runner
+├── RateLimiting/       # Rate-limit options + AddTaskRateLimiting()
 ├── Services/           # ITaskService + TaskService (business logic)
 ├── Properties/         # launchSettings.json (dev profile)
-├── Program.cs          # Composition root: .env loader, DI, OpenAPI, health
+├── Program.cs          # ~70-line composition root — calls .env loader then chains
+│                       #   AddTask*(...) extensions for each feature
 ├── appsettings*.json   # Hierarchical config; secrets come from .env / env vars
 ├── env.example         # Documented env-var contract
 ├── Dockerfile          # Production image (multi-stage, non-root). Not used in dev.
@@ -104,6 +109,70 @@ curl -s http://localhost:3004/api/tasks \
   -H 'content-type: application/json' \
   -d '{"title":"Write blog post","priority":"High","dueDate":"2026-06-01T00:00:00Z"}'
 ```
+
+## Caching
+
+`GET /api/tasks/{id}` is served through a cache-aside layer backed by
+`IDistributedCache`. The backend is selected at startup:
+
+| Condition | Backend |
+|---|---|
+| `REDIS_URL` is set | **Redis** via `Microsoft.Extensions.Caching.StackExchangeRedis`. Both URI form (`rediss://default:pw@host:6379`, what Upstash hands out) and StackExchange.Redis key/value form are accepted. |
+| `REDIS_URL` is unset | **In-memory** `MemoryDistributedCache`. Survives the process lifetime only — fine for `dotnet run`, not safe for multi-replica deployments. |
+
+The active backend is logged at startup, e.g.
+
+```
+[task-svc] cache backend → Redis (top-gazelle-112090.upstash.io:6379)
+```
+
+**Keys.** `{KeyPrefix}task:{id-hex}` (default prefix `task-svc:`). The prefix
+namespaces this service's keys away from the Nest stack which shares the
+same Upstash instance — change `Caching:KeyPrefix` if you ever fan out into
+multiple instances of this service against the same Redis.
+
+**TTL.** 5 minutes sliding (`Caching:TtlSeconds`). Tunable per environment.
+
+**Invalidation.** Writes (`PUT`/`DELETE`) explicitly remove the entry **after**
+the DB commits. Cache failures are logged and swallowed — a degraded cache
+must never take down a request. List endpoints (`GET /api/tasks`) are
+intentionally not cached: keying them on the full filter+page tuple makes
+invalidation fragile, and the gain is marginal for a typical UI that loads
+list → detail.
+
+## Rate limiting
+
+Two named policies are wired up via the built-in
+`Microsoft.AspNetCore.RateLimiting` middleware. Both partition by client IP
+so a noisy peer can't burn the global budget.
+
+| Policy | Applied to | Default | Tunable via |
+|---|---|---|---|
+| `read`  | `GET` endpoints           | 100 req / 60 s / IP | `RateLimiting:Read:{PermitLimit,WindowSeconds}` |
+| `write` | `POST` / `PUT` / `DELETE` | 20 req / 60 s / IP  | `RateLimiting:Write:{PermitLimit,WindowSeconds}` |
+
+Health checks are mapped **before** the rate limiter so orchestrator probes
+are never throttled.
+
+Rejected requests return **`429 Too Many Requests`** with an RFC 7807 body
+and a `Retry-After` header (seconds), matching the rest of the API's error
+shape:
+
+```json
+{
+  "type": "https://httpstatuses.io/429",
+  "title": "Too many requests",
+  "status": 429,
+  "detail": "Rate limit exceeded. Slow down and retry after the value in the Retry-After header.",
+  "traceId": "0HNF…"
+}
+```
+
+> **Multi-replica caveat.** ASP.NET Core's built-in rate limiter is
+> in-process, so a deployment running N replicas effectively allows N×limit
+> requests per partition. For globally consistent limits behind a load
+> balancer, replace the `Partition(...)` factory in `Program.cs` with a
+> Redis-backed limiter (e.g. `RedisRateLimiting.AspNetCore`).
 
 ## Database notes
 

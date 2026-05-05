@@ -29,6 +29,9 @@
          same way the Nest services do via @nestjs/config. Keeps secrets in
          one place and makes `dotnet run` work without manual env exports. -->
     <PackageReference Include="DotNetEnv" Version="3.1.1" />
+    <!-- Distributed cache backed by Redis (Upstash in this repo). Falls back
+         to in-memory when REDIS_URL isn't set. -->
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.0" />
   </ItemGroup>
 
 </Project>

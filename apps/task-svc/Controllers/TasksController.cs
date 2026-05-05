@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using ShopNest.TaskSvc.Dtos;
 using ShopNest.TaskSvc.Services;
 
@@ -11,8 +12,10 @@ public sealed class TasksController(ITaskService tasks) : ControllerBase
 {
     /// <summary>List tasks with optional filtering and pagination.</summary>
     [HttpGet]
+    [EnableRateLimiting("read")]
     [ProducesResponseType(typeof(PagedResult<TaskResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<PagedResult<TaskResponse>>> List(
         [FromQuery] TaskQuery query,
         CancellationToken ct
@@ -24,8 +27,10 @@ public sealed class TasksController(ITaskService tasks) : ControllerBase
 
     /// <summary>Get a single task by id.</summary>
     [HttpGet("{id:guid}")]
+    [EnableRateLimiting("read")]
     [ProducesResponseType(typeof(TaskResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<TaskResponse>> Get(Guid id, CancellationToken ct)
     {
         var found = await tasks.GetAsync(id, ct);
@@ -34,8 +39,10 @@ public sealed class TasksController(ITaskService tasks) : ControllerBase
 
     /// <summary>Create a new task.</summary>
     [HttpPost]
+    [EnableRateLimiting("write")]
     [ProducesResponseType(typeof(TaskResponse), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<TaskResponse>> Create(
         [FromBody] CreateTaskRequest request,
         CancellationToken ct
@@ -47,9 +54,11 @@ public sealed class TasksController(ITaskService tasks) : ControllerBase
 
     /// <summary>Replace an existing task.</summary>
     [HttpPut("{id:guid}")]
+    [EnableRateLimiting("write")]
     [ProducesResponseType(typeof(TaskResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<TaskResponse>> Update(
         Guid id,
         [FromBody] UpdateTaskRequest request,
@@ -62,8 +71,10 @@ public sealed class TasksController(ITaskService tasks) : ControllerBase
 
     /// <summary>Delete a task.</summary>
     [HttpDelete("{id:guid}")]
+    [EnableRateLimiting("write")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status429TooManyRequests)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
     {
         var deleted = await tasks.DeleteAsync(id, ct);

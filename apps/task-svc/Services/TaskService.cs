@@ -1,12 +1,17 @@
 using Microsoft.EntityFrameworkCore;
+using ShopNest.TaskSvc.Caching;
 using ShopNest.TaskSvc.Data;
 using ShopNest.TaskSvc.Domain;
 using ShopNest.TaskSvc.Dtos;
 
 namespace ShopNest.TaskSvc.Services;
 
-public sealed class TaskService(TasksDbContext db, TimeProvider clock, ILogger<TaskService> log)
-    : ITaskService
+public sealed class TaskService(
+    TasksDbContext db,
+    TimeProvider clock,
+    ITaskCache cache,
+    ILogger<TaskService> log
+) : ITaskService
 {
     public async Task<PagedResult<TaskResponse>> ListAsync(TaskQuery query, CancellationToken ct)
     {
@@ -50,8 +55,24 @@ public sealed class TaskService(TasksDbContext db, TimeProvider clock, ILogger<T
 
     public async Task<TaskResponse?> GetAsync(Guid id, CancellationToken ct)
     {
+        // Cache-aside: try the distributed cache, fall back to DB on miss,
+        // populate the cache for the next reader. Misses (or cache failures)
+        // never fail the request — TaskCache logs and returns null on errors.
+        var cached = await cache.GetAsync(id, ct);
+        if (cached is not null)
+        {
+            return cached;
+        }
+
         var entity = await db.Tasks.AsNoTracking().FirstOrDefaultAsync(t => t.Id == id, ct);
-        return entity is null ? null : TaskResponse.FromEntity(entity);
+        if (entity is null)
+        {
+            return null;
+        }
+
+        var dto = TaskResponse.FromEntity(entity);
+        await cache.SetAsync(dto, ct);
+        return dto;
     }
 
     public async Task<TaskResponse> CreateAsync(CreateTaskRequest request, CancellationToken ct)
@@ -101,6 +122,11 @@ public sealed class TaskService(TasksDbContext db, TimeProvider clock, ILogger<T
 
         await db.SaveChangesAsync(ct);
 
+        // Invalidate AFTER the write commits — invalidating before would
+        // race against concurrent readers who'd repopulate the cache with
+        // pre-update data.
+        await cache.RemoveAsync(entity.Id, ct);
+
         log.LogInformation("Updated task {TaskId}", entity.Id);
         return TaskResponse.FromEntity(entity);
     }
@@ -113,6 +139,7 @@ public sealed class TaskService(TasksDbContext db, TimeProvider clock, ILogger<T
         var affected = await db.Tasks.Where(t => t.Id == id).ExecuteDeleteAsync(ct);
         if (affected > 0)
         {
+            await cache.RemoveAsync(id, ct);
             log.LogInformation("Deleted task {TaskId}", id);
         }
         return affected > 0;
