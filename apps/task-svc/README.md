@@ -21,6 +21,7 @@ apps/task-svc/
 ├── Dtos/               # Request/response shapes (separate from entities)
 ├── Hosting/            # Cross-cutting host plumbing: env loader, CORS, ProblemDetails,
 │                       #   health writer, dev-time migration runner
+├── Messaging/          # Kafka consumer — OrderCreated → delivery TaskItem
 ├── RateLimiting/       # Rate-limit options + AddTaskRateLimiting()
 ├── Services/           # ITaskService + TaskService (business logic)
 ├── Properties/         # launchSettings.json (dev profile)
@@ -109,6 +110,38 @@ curl -s http://localhost:3004/api/tasks \
   -H 'content-type: application/json' \
   -d '{"title":"Write blog post","priority":"High","dueDate":"2026-06-01T00:00:00Z"}'
 ```
+
+## Kafka: `OrderCreated` → delivery tasks
+
+After checkout, **`order-svc`** persists the order and publishes an **`OrderCreated`**
+event to the Kafka topic **`order-events`** (override with `KAFKA_ORDER_EVENTS_TOPIC`).
+This service runs a background **`OrderCreatedKafkaConsumer`** when **`KAFKA_BROKERS`**
+is set (same **`KAFKA_*`** broker settings as shop-/order-svc — usually the repo-root `.env`).
+**Aiven mTLS** (`KAFKA_SSL_CA`, `KAFKA_SSL_CERT`, `KAFKA_SSL_KEY`) is detected **before**
+SASL: if all three PEMs exist, the consumer uses **`security.protocol=SSL`** with client
+certificates even when username/password are also present in `.env`.
+
+| Detail | Value |
+|---|---|
+| Topic | `order-events` or `Kafka:OrderCreated:Topic` / `KAFKA_ORDER_EVENTS_TOPIC` |
+| Consumer group | `task-svc` or `KAFKA_TASK_SVC_GROUP_ID` |
+| Task primary key | Same **uuid** as the **order id** — duplicate events hit PK uniqueness and are ignored (idempotent). |
+| Task shape | Title `Deliver order {orderId}`, priority **High**, status **Todo**, JSON metadata in `description`. |
+
+Disable only the consumer while keeping the REST API:
+
+```env
+KAFKA_ORDER_CONSUMER_ENABLED=false
+```
+
+Create both Kafka topics once after provisioning the cluster:
+
+```bash
+pnpm kafka:topics
+# equivalent: node scripts/ensure-kafka-topic.mjs
+```
+
+That script ensures **`checkout-events`** and **`order-events`** on the broker configured in the repo-root `.env`.
 
 ## Caching
 
@@ -208,10 +241,11 @@ project exists under this folder, `dotnet test` automatically picks it up.
 
 ## Why isolated?
 
-Per the current scope, this service does **not** participate in the GraphQL
-gateway, the JWT auth flow, or any cross-service contracts. That keeps the
-blast radius small while iterating on the .NET stack. When integration is
-desired:
+This service does **not** participate in the GraphQL gateway or JWT auth flow.
+It **does** integrate downstream from **`order-svc` via Kafka** (`OrderCreated`
+→ delivery task). Other integrations can follow the same pattern when needed:
+
+When exposing tasks via GraphQL:
 
 1. Add a `task-resolver.ts` in `apps/api-gateway/src/graphql/`.
 2. Add a `TaskBackendService` to `backend-http.service.ts` (it already

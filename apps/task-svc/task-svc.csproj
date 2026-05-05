@@ -32,6 +32,8 @@
     <!-- Distributed cache backed by Redis (Upstash in this repo). Falls back
          to in-memory when REDIS_URL isn't set. -->
     <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.0" />
+    <!-- Consumes OrderCreated events from order-svc (same broker env as Nest). -->
+    <PackageReference Include="Confluent.Kafka" Version="2.11.1" />
   </ItemGroup>
 
 </Project>

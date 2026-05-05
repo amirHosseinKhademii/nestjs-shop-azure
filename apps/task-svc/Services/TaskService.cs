@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using ShopNest.TaskSvc.Caching;
 using ShopNest.TaskSvc.Data;
 using ShopNest.TaskSvc.Domain;
@@ -96,6 +98,59 @@ public sealed class TaskService(
         await db.SaveChangesAsync(ct);
 
         log.LogInformation("Created task {TaskId} ({Title})", entity.Id, entity.Title);
+        return TaskResponse.FromEntity(entity);
+    }
+
+    public async Task<TaskResponse?> EnsureDeliveryTaskFromOrderAsync(
+        OrderCreatedDeliveryCommand command,
+        CancellationToken ct
+    )
+    {
+        var now = clock.GetUtcNow();
+        var description = JsonSerializer.Serialize(
+            new
+            {
+                kind = "delivery",
+                command.OrderId,
+                command.UserId,
+                command.CartId,
+                command.CorrelationId,
+                command.LineCount,
+            }
+        );
+
+        var entity = new TaskItem
+        {
+            Id = command.OrderId,
+            Title = $"Deliver order {command.OrderId}",
+            Description = description,
+            Status = TaskItemStatus.Todo,
+            Priority = TaskItemPriority.High,
+            DueDate = null,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+
+        db.Tasks.Add(entity);
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is PostgresException pg && pg.SqlState == "23505")
+        {
+            log.LogDebug(
+                "Delivery task already exists for order {OrderId} (duplicate OrderCreated)",
+                command.OrderId
+            );
+            return null;
+        }
+
+        log.LogInformation(
+            "Created delivery task {TaskId} from OrderCreated (correlation {CorrelationId})",
+            entity.Id,
+            command.CorrelationId
+        );
         return TaskResponse.FromEntity(entity);
     }
 

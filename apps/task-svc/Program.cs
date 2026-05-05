@@ -4,6 +4,7 @@ using Scalar.AspNetCore;
 using ShopNest.TaskSvc.Caching;
 using ShopNest.TaskSvc.Data;
 using ShopNest.TaskSvc.Hosting;
+using ShopNest.TaskSvc.Messaging;
 using ShopNest.TaskSvc.RateLimiting;
 using ShopNest.TaskSvc.Services;
 
@@ -28,6 +29,7 @@ builder.Services.AddTaskProblemDetails();
 builder.Services.AddTaskCors(builder.Configuration);
 builder.Services.AddTaskCache(builder.Configuration);
 builder.Services.AddTaskRateLimiting(builder.Configuration);
+builder.Services.AddOrderCreatedKafkaConsumer(builder.Configuration);
 builder.Services.AddOpenApi();
 
 // ─── Pipeline ──────────────────────────────────────────────────────────────

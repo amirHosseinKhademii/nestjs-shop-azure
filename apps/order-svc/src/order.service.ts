@@ -2,6 +2,7 @@ import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { ordersCreatedTotal } from '@shop/observability';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { OrderCreatedPublisherService } from './order-created-publisher.service';
 import { Order } from './entities/order.entity';
 import { OrderLine } from './entities/order-line.entity';
 import { ProcessedEvent } from './entities/processed-event.entity';
@@ -26,6 +27,7 @@ export class OrderService {
     @InjectRepository(ProcessedEvent)
     private readonly processed: Repository<ProcessedEvent>,
     private readonly dataSource: DataSource,
+    private readonly orderCreatedPublisher: OrderCreatedPublisherService,
   ) {}
 
   async createOrderFromCheckout(body: CheckoutPayload, idempotencyKey: string): Promise<Order> {
@@ -43,7 +45,8 @@ export class OrderService {
       throw new BadRequestException('Invalid payload dimensions');
     }
 
-    return this.dataSource.transaction(async (manager) => {
+    let shouldEmitOrderCreated = false;
+    const order = await this.dataSource.transaction(async (manager) => {
       const procRepo = manager.getRepository(ProcessedEvent);
       const hit = await procRepo.findOne({ where: { id: idempotencyKey } });
       if (hit?.orderId) {
@@ -54,19 +57,19 @@ export class OrderService {
         if (o) return o;
       }
 
-      const order = manager.create(Order, {
+      const newOrder = manager.create(Order, {
         userId: body.userId,
         cartId: body.cartId,
         correlationId: body.correlationId,
         status: 'confirmed',
       });
-      await manager.save(order);
+      await manager.save(newOrder);
 
       const lineEntities: OrderLine[] = [];
       for (let i = 0; i < productIds.length; i++) {
         lineEntities.push(
           manager.create(OrderLine, {
-            order,
+            order: newOrder,
             productId: productIds[i],
             quantity: quantities[i],
             priceCents: 0,
@@ -77,16 +80,29 @@ export class OrderService {
 
       await procRepo.save({
         id: idempotencyKey,
-        orderId: order.id,
+        orderId: newOrder.id,
       });
 
-      this.log.log(`Order ${order.id} created for correlation ${body.correlationId}`);
+      this.log.log(`Order ${newOrder.id} created for correlation ${body.correlationId}`);
       ordersCreatedTotal.inc({ result: 'success' });
+      shouldEmitOrderCreated = true;
       return manager.findOneOrFail(Order, {
-        where: { id: order.id },
+        where: { id: newOrder.id },
         relations: ['lines'],
       });
     });
+
+    if (shouldEmitOrderCreated) {
+      try {
+        await this.orderCreatedPublisher.publishOrderCreated(order);
+      } catch (e) {
+        this.log.error(
+          `OrderCreated publish failed for order ${order.id}: ${(e as Error).message}`,
+        );
+      }
+    }
+
+    return order;
   }
 
   async listOrdersForUser(userId: string): Promise<Order[]> {

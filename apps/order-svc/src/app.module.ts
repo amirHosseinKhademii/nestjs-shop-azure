@@ -13,6 +13,7 @@ import { OrderService } from './order.service';
 import { HealthController } from './health.controller';
 import { ServiceBusListenerService } from './service-bus-listener.service';
 import { KafkaCheckoutListenerService } from './kafka-checkout-listener.service';
+import { OrderCreatedPublisherService } from './order-created-publisher.service';
 
 @Module({
   imports: [
@@ -35,6 +36,11 @@ import { KafkaCheckoutListenerService } from './kafka-checkout-listener.service'
     TerminusModule,
   ],
   controllers: [HealthController, OrderController, InternalController],
-  providers: [OrderService, ServiceBusListenerService, KafkaCheckoutListenerService],
+  providers: [
+    OrderService,
+    OrderCreatedPublisherService,
+    ServiceBusListenerService,
+    KafkaCheckoutListenerService,
+  ],
 })
 export class AppModule {}

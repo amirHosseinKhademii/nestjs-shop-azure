@@ -38,9 +38,10 @@
     "dev:web": "pnpm --filter @shop/web dev",
     "dev:task": "dotnet run --project apps/task-svc",
     "dev:services": "turbo run start:dev --filter='./apps/*-svc' --filter=@shop/api-gateway",
-    "dev": "turbo run start:dev dev --filter='./apps/*'",
+    "dev": "node scripts/dev-stack.mjs",
     "dev:all": "turbo run start:dev dev --filter='./apps/*'",
-    "dev:full": "node scripts/dev-stack.mjs",
+    "dev:full": "pnpm run dev",
+    "kafka:topics": "node scripts/ensure-kafka-topic.mjs",
     "audit": "pnpm audit --audit-level=moderate"
   },
   "devDependencies": {

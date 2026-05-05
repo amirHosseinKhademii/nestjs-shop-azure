@@ -62,7 +62,8 @@ if (!brokers) {
   console.error('KAFKA_BROKERS not set in .env');
   process.exit(1);
 }
-const topic = env.KAFKA_TOPIC ?? 'checkout-events';
+const checkoutTopic = env.KAFKA_TOPIC ?? 'checkout-events';
+const orderEventsTopic = env.KAFKA_ORDER_EVENTS_TOPIC ?? 'order-events';
 const partitions = Number(process.env.KAFKA_TOPIC_PARTITIONS ?? 2);
 const replicationFactor = Number(process.env.KAFKA_TOPIC_REPLICATION ?? 2);
 
@@ -98,29 +99,36 @@ try {
   await admin.connect();
   console.log(`Connected to ${brokers}`);
 
-  const existing = await admin.listTopics();
-  if (existing.includes(topic)) {
-    console.log(`Topic "${topic}" already exists — nothing to do`);
-  } else {
-    console.log(`Creating topic "${topic}" (partitions=${partitions}, replication=${replicationFactor}) ...`);
-    const created = await admin.createTopics({
-      validateOnly: false,
-      waitForLeaders: true,
-      topics: [
-        {
-          topic,
-          numPartitions: partitions,
-          replicationFactor,
-        },
-      ],
-    });
-    console.log(created ? `Topic "${topic}" created` : `Topic "${topic}" already existed (race)`);
+  async function ensureTopic(topic) {
+    const existing = await admin.listTopics();
+    if (existing.includes(topic)) {
+      console.log(`Topic "${topic}" already exists — nothing to do`);
+    } else {
+      console.log(`Creating topic "${topic}" (partitions=${partitions}, replication=${replicationFactor}) ...`);
+      const created = await admin.createTopics({
+        validateOnly: false,
+        waitForLeaders: true,
+        topics: [
+          {
+            topic,
+            numPartitions: partitions,
+            replicationFactor,
+          },
+        ],
+      });
+      console.log(created ? `Topic "${topic}" created` : `Topic "${topic}" already existed (race)`);
+    }
+
+    const meta = await admin.fetchTopicMetadata({ topics: [topic] });
+    for (const t of meta.topics) {
+      console.log(`  ${t.name} → ${t.partitions.length} partitions`);
+    }
   }
 
-  const meta = await admin.fetchTopicMetadata({ topics: [topic] });
-  for (const t of meta.topics) {
-    console.log(`  ${t.name} → ${t.partitions.length} partitions`);
-  }
+  console.log('--- checkout pipeline ---');
+  await ensureTopic(checkoutTopic);
+  console.log('\n--- order → task-svc (OrderCreated) ---');
+  await ensureTopic(orderEventsTopic);
 } catch (e) {
   console.error('Topic ensure failed:', e.message);
   process.exitCode = 1;
