@@ -36,9 +36,11 @@
     "dev:shop": "pnpm --filter @shop/shop-svc start:dev",
     "dev:order": "pnpm --filter @shop/order-svc start:dev",
     "dev:web": "pnpm --filter @shop/web dev",
+    "dev:task": "dotnet run --project apps/task-svc",
     "dev:services": "turbo run start:dev --filter='./apps/*-svc' --filter=@shop/api-gateway",
     "dev": "turbo run start:dev dev --filter='./apps/*'",
     "dev:all": "turbo run start:dev dev --filter='./apps/*'",
+    "dev:full": "node scripts/dev-stack.mjs",
     "audit": "pnpm audit --audit-level=moderate"
   },
   "devDependencies": {

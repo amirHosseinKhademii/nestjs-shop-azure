@@ -163,7 +163,61 @@ jobs:
             echo "turbo build → **${{ job.status }}**"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # ─── Stage 4 ─ GraphQL schema + codegen drift guard ───────────────────────
+  # ─── Stage 4 ─ task-svc (.NET 10) verify + build ─────────────────────────
+  #
+  # Standalone .NET service. Lives outside the pnpm/turbo graph so it gets
+  # its own job rather than a row in the matrix above. Steps mirror the Node
+  # services' Verify→Build flow: format → restore → build → test.
+  dotnet:
+    name: Verify+Build · task-svc
+    needs: format
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/task-svc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v5
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('apps/task-svc/**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Format check
+        run: dotnet format --verify-no-changes --no-restore
+
+      - name: Build (Release, warnings as errors)
+        run: dotnet build -c Release --no-restore
+
+      - name: Test
+        # `dotnet test` exits 0 when no test projects are discovered, so
+        # this is a no-op until the first test project is added — at which
+        # point CI starts enforcing it without any workflow change.
+        run: dotnet test -c Release --no-build --verbosity minimal
+
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "## task-svc (.NET 10)"
+            echo ""
+            echo "format → restore → build → test → **${{ job.status }}**"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ─── Stage 5 ─ GraphQL schema + codegen drift guard ───────────────────────
   #
   # The api-gateway is code-first: resolvers are the source of truth and
   # `apps/api-gateway/src/schema.gql` is regenerated at every dev boot. The
@@ -238,7 +292,7 @@ jobs:
   # ─── Rollup ─ Single required check for branch protection ─────────────────
   ci-summary:
     name: CI summary
-    needs: [format, verify, build, schema]
+    needs: [format, verify, build, dotnet, schema]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 1
@@ -249,6 +303,7 @@ jobs:
           F='${{ needs.format.result }}'
           V='${{ needs.verify.result }}'
           B='${{ needs.build.result }}'
+          D='${{ needs.dotnet.result }}'
           S='${{ needs.schema.result }}'
           {
             echo "# CI rollup"
@@ -258,10 +313,11 @@ jobs:
             echo "| Format            | $F |"
             echo "| Verify (matrix×5) | $V |"
             echo "| Build  (matrix×5) | $B |"
+            echo "| task-svc (.NET)   | $D |"
             echo "| Schema drift      | $S |"
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$F" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$S" != 'success' ]; then
-            echo "::error::At least one CI stage was not successful (format=$F verify=$V build=$B schema=$S)"
+          if [ "$F" != 'success' ] || [ "$V" != 'success' ] || [ "$B" != 'success' ] || [ "$D" != 'success' ] || [ "$S" != 'success' ]; then
+            echo "::error::At least one CI stage was not successful (format=$F verify=$V build=$B dotnet=$D schema=$S)"
             exit 1
           fi
           echo "::notice::All CI stages passed."
