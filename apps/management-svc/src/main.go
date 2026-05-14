@@ -17,29 +17,25 @@ import (
 	"management-svc/internal/utils"
 )
 
-func main() {
-	utils.LoadAncestorDotEnv()
+func shutdown(srv *http.Server) {
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("shutdown signal received, stopping server…")
 
-	ctx := context.Background()
-	pool, err := config.ConnectPostgresPool(ctx)
-	if err != nil {
-		log.Fatal(err)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Printf("http shutdown: %v", err)
 	}
-	defer pool.Close()
-	log.Println("postgres: connected")
+}
+
+func bootstrap(mux *http.ServeMux) {
 
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
 		port = "3010"
 	}
-
-	metaSvc := service.NewMetaService()
-	healthSvc := service.NewHealthService(pool)
-	ctrl := controller.NewHTTPController(metaSvc, healthSvc)
-
-	mux := http.NewServeMux()
-	ctrl.Register(mux)
-
 	srv := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,
@@ -53,14 +49,30 @@ func main() {
 		}
 	}()
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("shutdown signal received, stopping server…")
+	shutdown(srv)
+}
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Printf("http shutdown: %v", err)
+func main() {
+	utils.LoadAncestorDotEnv()
+
+	ctx := context.Background()
+
+	pool, err := config.ConnectPostgresPool(ctx)
+	if err != nil {
+		log.Fatal(err)
 	}
+	defer pool.Close()
+	log.Println("postgres: connected")
+
+	metaSvc := service.NewMetaService()
+
+	healthSvc := service.NewHealthService(pool)
+
+	ctrl := controller.NewHTTPController(metaSvc, healthSvc)
+
+	mux := http.NewServeMux()
+
+	ctrl.Register(mux)
+
+	bootstrap(mux)
 }
