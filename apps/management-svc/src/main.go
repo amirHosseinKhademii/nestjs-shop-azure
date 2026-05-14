@@ -36,6 +36,9 @@ func bootstrap(mux *http.ServeMux) {
 	if port == "" {
 		port = "3010"
 	}
+	// http.Server{ ... } is a struct literal (one server value with those fields).
+	// & in front means: “allocate that struct and give me a pointer to it.”
+	// So srv has type *http.Server. The HTTP server object lives in one place; srv is how you refer to it.
 	srv := &http.Server{
 		Addr:              ":" + port,
 		Handler:           mux,
@@ -64,12 +67,13 @@ func main() {
 	defer pool.Close()
 	log.Println("postgres: connected")
 
-	metaSvc := service.NewMetaService()
+	ctrl := controller.NewHTTPController(
+		service.NewMetaService(),
+		service.NewHealthService(pool))
 
-	healthSvc := service.NewHealthService(pool)
-
-	ctrl := controller.NewHTTPController(metaSvc, healthSvc)
-
+	// http.NewServeMux() returns a *http.ServeMux.
+	//  So mux is already a pointer to the mux.
+	//  You do not write & yourself; the standard library returns the pointer for you.
 	mux := http.NewServeMux()
 
 	ctrl.Register(mux)
