@@ -37,7 +37,7 @@
     "dev:order": "pnpm --filter @shop/order-svc start:dev",
     "dev:web": "pnpm --filter @shop/web dev",
     "dev:task": "dotnet run --project apps/task-svc",
-    "dev:management": "cd apps/management-svc && go run ./src",
+    "dev:management": "cd apps/management-svc && go run ./cmd/web",
     "dev:services": "turbo run start:dev --filter='./apps/*-svc' --filter=@shop/api-gateway",
     "dev": "node scripts/dev-stack.mjs",
     "dev:all": "turbo run start:dev dev --filter='./apps/*'",

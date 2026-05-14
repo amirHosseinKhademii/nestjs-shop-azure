@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"management-svc/internal/config"
-	"management-svc/internal/controller"
-	"management-svc/internal/service"
-	"management-svc/internal/utils"
+	"management-svc/pkg/config"
+	"management-svc/pkg/controller"
+	"management-svc/pkg/service"
+	"management-svc/pkg/utils"
 )
 
 func shutdown(srv *http.Server) {
