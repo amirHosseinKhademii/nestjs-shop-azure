@@ -24,6 +24,7 @@ func shutdown(srv *http.Server) {
 	log.Println("shutdown signal received, stopping server…")
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// defer cancel() means: “always call cancel() once shutdown is done with this scope.”
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("http shutdown: %v", err)
@@ -45,6 +46,18 @@ func bootstrap(mux *http.ServeMux) {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	// go starts a goroutine: the function literal after it runs in the background,
+	// at the same time as the rest of bootstrap.
+	// The call go func() { ... }() returns immediately;
+	// it does not wait for ListenAndServe to finish.
+	// Why that matters here
+	// srv.ListenAndServe() blocks.
+	// It runs until the server stops (error or graceful shutdown).
+	// If you called it without go on the main path of bootstrap,
+	// execution would sit inside ListenAndServe forever and you would never reach the next line:
+
+	// So go is what lets the server run concurrently while shutdown
+	// still runs sequentially in bootstrap and can stop the server cleanly.
 	go func() {
 		log.Printf("HTTP  http://127.0.0.1:%s/  (PORT=%s)", port, port)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
