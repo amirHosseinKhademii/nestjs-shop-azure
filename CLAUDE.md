@@ -1,6 +1,6 @@
 # shop-nest-azure — agent instructions
 
-Monorepo: NestJS microservices (GraphQL **api-gateway**, **user-svc** / Postgres, **shop-svc** / Mongo, **order-svc** / Postgres), optional **web** client, Azure-oriented infra. See **`PLAN.md`** for architecture and build order.
+Monorepo: NestJS microservices (GraphQL **api-gateway**, **user-svc** / Postgres, **shop-svc** / Mongo, **order-svc** / Postgres, **management-svc** / Go + chi + sqlc + Postgres), optional **web** client, Azure-oriented infra. See **`PLAN.md`** for architecture and build order.
 
 ## Bundled skills (project-local)
 

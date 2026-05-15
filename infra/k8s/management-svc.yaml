@@ -1,0 +1,103 @@
+# management-svc (Go): internal-only CRUD service for product management.
+#
+# Storage is external Postgres (DATABASE_URL from shop-app-secrets).
+# Uses the same connection string as user-svc / order-svc.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: management-svc
+  namespace: shop
+  labels:
+    app: management-svc
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: management-svc
+  template:
+    metadata:
+      labels:
+        app: management-svc
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '3010'
+        prometheus.io/path: '/metrics'
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: management-svc
+          image: docker.io/amir2575/shop-management-svc:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3010
+          envFrom:
+            - secretRef:
+                name: shop-app-secrets
+          env:
+            - name: PORT
+              value: '3010'
+            - name: OTEL_SERVICE_NAME
+              value: management-svc
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://alloy.observability.svc.cluster.local:4318
+            - name: OBS_ENABLED
+              value: 'true'
+            - name: OTEL_TRACES_SAMPLER
+              value: parentbased_traceidratio
+            - name: OTEL_TRACES_SAMPLER_ARG
+              value: '0.1'
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ['ALL']
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: '1'
+              memory: 512Mi
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: management-svc
+  namespace: shop
+spec:
+  type: ClusterIP
+  selector:
+    app: management-svc
+  ports:
+    - name: http
+      port: 3010
+      targetPort: 3010
+      protocol: TCP

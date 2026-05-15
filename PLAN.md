@@ -24,12 +24,13 @@ This file mirrors the approved architecture plan. **Do not treat this as executa
 2. user-svc + gateway JWT.
 3. shop-svc (products, cart, checkout publish).
 4. order-svc + consumer + idempotency.
-5. Gateway GraphQL → REST backends.
-6. React client.
-7. Dockerfiles + K8s + Ingress.
-8. Terraform phases + Front Door notes.
-9. Dual CI/CD pipelines.
-10. OpenTelemetry + correlation IDs.
+5. management-svc (Go, chi + sqlc + Postgres).
+6. Gateway GraphQL → REST backends.
+7. React client.
+8. Dockerfiles + K8s + Ingress.
+9. Terraform phases + Front Door notes.
+10. Dual CI/CD pipelines.
+11. OpenTelemetry + correlation IDs.
 
 ## Gaps explicitly covered in implementation
 
