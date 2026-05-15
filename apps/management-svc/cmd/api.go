@@ -31,14 +31,15 @@ func (app *application) mount() http.Handler {
 		w.Write([]byte("Ok"))
 	})
 
-	productsService := products.NewService(repository.New(app.pool))
-	productsHandler := products.NewHandler(productsService)
+	employeeService := products.NewService(repository.New(app.pool))
+	employeeHandler := products.NewHandler(employeeService)
 
-	r.Get("/products", productsHandler.ListProductHandler)
-	r.Get("/products/{id}", productsHandler.GetProductById)
-	r.Post("/products", productsHandler.AddProductHandler)
-	r.Put("/products/{id}", productsHandler.UpdateProductHandler)
-	r.Delete("/products/{id}", productsHandler.DeleteProductHandler)
+	r.Get("/employees", employeeHandler.ListEmployeesHandler)
+	r.Get("/employees/{id}", employeeHandler.GetEmployeeById)
+	r.Get("/employees/email/{email}", employeeHandler.GetEmployeeByEmail)
+	r.Post("/employees", employeeHandler.AddEmployeeHandler)
+	r.Put("/employees/{id}", employeeHandler.UpdateEmployeeHandler)
+	r.Delete("/employees/{id}", employeeHandler.DeleteEmployeeHandler)
 
 	return r
 }

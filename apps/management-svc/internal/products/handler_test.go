@@ -13,94 +13,156 @@ import (
 
 // mockService implements products.Service for handler tests.
 type mockService struct {
-	listProducts []repository.Product
-	getProduct   repository.Product
-	addProduct   repository.AddProductParams
-	delProduct   int32
-	updateProduct repository.UpdateProductParams
+	listEmployees  []repository.Employee
+	getEmployee    repository.Employee
+	getByEmail     repository.Employee
+	addEmployee    repository.AddEmployeeParams
+	delEmployee    int32
+	updateEmployee repository.UpdateEmployeeParams
 
-	listErr  error
-	getErr   error
-	addErr   error
-	delErr   error
-	updateErr error
+	listErr       error
+	getErr        error
+	getByEmailErr error
+	addErr        error
+	delErr        error
+	updateErr     error
 }
 
-func (m *mockService) ListProducts(ctx context.Context) ([]repository.Product, error) {
-	return m.listProducts, m.listErr
+func (m *mockService) ListEmployees(ctx context.Context) ([]repository.Employee, error) {
+	return m.listEmployees, m.listErr
 }
 
-func (m *mockService) GetProductById(ctx context.Context, id int32) (repository.Product, error) {
-	return m.getProduct, m.getErr
+func (m *mockService) GetEmployeeById(ctx context.Context, id int32) (repository.Employee, error) {
+	return m.getEmployee, m.getErr
 }
 
-func (m *mockService) AddProduct(ctx context.Context, name string, price int32, quantity int32) error {
-	m.addProduct = repository.AddProductParams{Name: name, Price: price, Quantity: quantity}
+func (m *mockService) GetEmployeeByEmail(ctx context.Context, email string) (repository.Employee, error) {
+	return m.getByEmail, m.getByEmailErr
+}
+
+func (m *mockService) AddEmployee(ctx context.Context, name string, email string, department string) error {
+	m.addEmployee = repository.AddEmployeeParams{Name: name, Email: email, Department: department}
 	return m.addErr
 }
 
-func (m *mockService) DeleteProduct(ctx context.Context, id int32) error {
-	m.delProduct = id
+func (m *mockService) DeleteEmployee(ctx context.Context, id int32) error {
+	m.delEmployee = id
 	return m.delErr
 }
 
-func (m *mockService) UpdateProduct(ctx context.Context, id int32, name string, price int32, quantity int32) error {
-	m.updateProduct = repository.UpdateProductParams{ID: id, Name: name, Price: price, Quantity: quantity}
+func (m *mockService) UpdateEmployee(ctx context.Context, id int32, name string, email string, department string) error {
+	m.updateEmployee = repository.UpdateEmployeeParams{ID: id, Name: name, Email: email, Department: department}
 	return m.updateErr
 }
 
-func TestAddProductHandler(t *testing.T) {
+func TestListEmployeesHandler(t *testing.T) {
+	mock := &mockService{
+		listEmployees: []repository.Employee{
+			{ID: 1, Name: "John Doe", Email: "john@example.com", Department: "Engineering"},
+		},
+	}
+	handler := NewHandler(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/employees", nil)
+	w := httptest.NewRecorder()
+
+	handler.ListEmployeesHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var resp []repository.Employee
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("expected 1 employee, got %d", len(resp))
+	}
+	if resp[0].Name != "John Doe" {
+		t.Errorf("expected name %q, got %q", "John Doe", resp[0].Name)
+	}
+}
+
+func TestGetEmployeeByIdHandler(t *testing.T) {
+	mock := &mockService{
+		getEmployee: repository.Employee{ID: 1, Name: "John Doe", Email: "john@example.com", Department: "Engineering"},
+	}
+	handler := NewHandler(mock)
+
+	req := httptest.NewRequest(http.MethodGet, "/employees/1", nil)
+	w := httptest.NewRecorder()
+
+	handler.GetEmployeeById(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var resp repository.Employee
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp.ID != 1 {
+		t.Errorf("expected ID %d, got %d", 1, resp.ID)
+	}
+	if resp.Name != "John Doe" {
+		t.Errorf("expected name %q, got %q", "John Doe", resp.Name)
+	}
+}
+
+func TestAddEmployeeHandler(t *testing.T) {
 	mock := &mockService{}
 	handler := NewHandler(mock)
 
-	body := `{"name":"Widget","price":100,"quantity":10}`
-	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewBufferString(body))
+	body := `{"name":"John Doe","email":"john@example.com","department":"Engineering"}`
+	req := httptest.NewRequest(http.MethodPost, "/employees", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
-	handler.AddProductHandler(w, req)
+	handler.AddEmployeeHandler(w, req)
 
 	if w.Code != http.StatusCreated {
 		t.Errorf("expected status %d, got %d", http.StatusCreated, w.Code)
 	}
 
-	var resp repository.AddProductParams
+	var resp repository.AddEmployeeParams
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	if resp.Name != "Widget" {
-		t.Errorf("expected name %q, got %q", "Widget", resp.Name)
+	if resp.Name != "John Doe" {
+		t.Errorf("expected name %q, got %q", "John Doe", resp.Name)
 	}
-	if resp.Price != 100 {
-		t.Errorf("expected price %d, got %d", 100, resp.Price)
+	if resp.Email != "john@example.com" {
+		t.Errorf("expected email %q, got %q", "john@example.com", resp.Email)
 	}
-	if resp.Quantity != 10 {
-		t.Errorf("expected quantity %d, got %d", 10, resp.Quantity)
+	if resp.Department != "Engineering" {
+		t.Errorf("expected department %q, got %q", "Engineering", resp.Department)
 	}
 }
 
-func TestAddProductHandlerInvalidJSON(t *testing.T) {
+func TestAddEmployeeHandlerInvalidJSON(t *testing.T) {
 	mock := &mockService{}
 	handler := NewHandler(mock)
 
-	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewBufferString(`{invalid`))
+	req := httptest.NewRequest(http.MethodPost, "/employees", bytes.NewBufferString(`{invalid`))
 	w := httptest.NewRecorder()
 
-	handler.AddProductHandler(w, req)
+	handler.AddEmployeeHandler(w, req)
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("expected status %d, got %d", http.StatusBadRequest, w.Code)
 	}
 }
 
-func TestAddProductHandlerValidationErrors(t *testing.T) {
+func TestAddEmployeeHandlerValidationErrors(t *testing.T) {
 	mock := &mockService{}
 	handler := NewHandler(mock)
 
-	body := `{"name":"","price":-1,"quantity":-1}`
-	req := httptest.NewRequest(http.MethodPost, "/products", bytes.NewBufferString(body))
+	body := `{"name":"","email":"invalid","department":""}`
+	req := httptest.NewRequest(http.MethodPost, "/employees", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
-	handler.AddProductHandler(w, req)
+	handler.AddEmployeeHandler(w, req)
 
 	if w.Code != http.StatusUnprocessableEntity {
 		t.Errorf("expected status %d, got %d", http.StatusUnprocessableEntity, w.Code)
@@ -114,19 +176,51 @@ func TestAddProductHandlerValidationErrors(t *testing.T) {
 		t.Error("expected validation errors, got none")
 	}
 }
+
+func TestUpdateEmployeeHandler(t *testing.T) {
+	mock := &mockService{}
+	handler := NewHandler(mock)
+
+	body := `{"name":"John Updated","email":"john.updated@example.com","department":"Engineering"}`
+	req := httptest.NewRequest(http.MethodPut, "/employees/1", bytes.NewBufferString(body))
 	w := httptest.NewRecorder()
 
-	handler.AddProductHandler(w, req)
+	handler.UpdateEmployeeHandler(w, req)
 
-	if w.Code \!= http.StatusUnprocessableEntity {
-		t.Errorf("expected status %d, got %d", http.StatusUnprocessableEntity, w.Code)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
 	}
 
-	var resp ValidationErrors
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err \!= nil {
+	var resp repository.UpdateEmployeeParams
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	if len(resp.Errors) == 0 {
-		t.Error("expected validation errors, got none")
+	if resp.ID != 1 {
+		t.Errorf("expected ID %d, got %d", 1, resp.ID)
+	}
+	if resp.Name != "John Updated" {
+		t.Errorf("expected name %q, got %q", "John Updated", resp.Name)
+	}
+}
+
+func TestDeleteEmployeeHandler(t *testing.T) {
+	mock := &mockService{}
+	handler := NewHandler(mock)
+
+	req := httptest.NewRequest(http.MethodDelete, "/employees/1", nil)
+	w := httptest.NewRecorder()
+
+	handler.DeleteEmployeeHandler(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, w.Code)
+	}
+
+	var resp map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal response: %v", err)
+	}
+	if resp["message"] != "employee deleted successfully" {
+		t.Errorf("expected message %q, got %q", "employee deleted successfully", resp["message"])
 	}
 }

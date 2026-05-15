@@ -10,60 +10,66 @@ import (
 
 // mockQuerier implements repository.Querier for testing.
 type mockQuerier struct {
-	products  []repository.Product
-	byID      repository.Product
-	listErr   error
-	getErr    error
-	addErr    error
-	delErr    error
-	updateErr error
+	employees     []repository.Employee
+	byID          repository.Employee
+	byEmail       repository.Employee
+	listErr       error
+	getErr        error
+	getByEmailErr error
+	addErr        error
+	delErr        error
+	updateErr     error
 }
 
-func (m *mockQuerier) ListProducts(ctx context.Context) ([]repository.Product, error) {
-	return m.products, m.listErr
+func (m *mockQuerier) ListEmployees(ctx context.Context) ([]repository.Employee, error) {
+	return m.employees, m.listErr
 }
 
-func (m *mockQuerier) ProductById(ctx context.Context, id int32) (repository.Product, error) {
+func (m *mockQuerier) EmployeeById(ctx context.Context, id int32) (repository.Employee, error) {
 	return m.byID, m.getErr
 }
 
-func (m *mockQuerier) AddProduct(ctx context.Context, arg repository.AddProductParams) error {
+func (m *mockQuerier) EmployeeByEmail(ctx context.Context, email string) (repository.Employee, error) {
+	return m.byEmail, m.getByEmailErr
+}
+
+func (m *mockQuerier) AddEmployee(ctx context.Context, arg repository.AddEmployeeParams) error {
 	return m.addErr
 }
 
-func (m *mockQuerier) DeleteProduct(ctx context.Context, id int32) error {
+func (m *mockQuerier) DeleteEmployee(ctx context.Context, id int32) error {
 	return m.delErr
 }
 
-func (m *mockQuerier) UpdateProduct(ctx context.Context, arg repository.UpdateProductParams) error {
+func (m *mockQuerier) UpdateEmployee(ctx context.Context, arg repository.UpdateEmployeeParams) error {
 	return m.updateErr
 }
 
-func TestListProducts(t *testing.T) {
+func TestListEmployees(t *testing.T) {
 	ctx := context.Background()
-	expected := []repository.Product{
-		{ID: 1, Name: "Widget", Price: 100, Quantity: 10},
+	expected := []repository.Employee{
+		{ID: 1, Name: "John Doe", Email: "john@example.com", Department: "Engineering"},
 	}
-	svc := NewService(&mockQuerier{products: expected})
+	svc := NewService(&mockQuerier{employees: expected})
 
-	result, err := svc.ListProducts(ctx)
+	result, err := svc.ListEmployees(ctx)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(result) != len(expected) {
-		t.Fatalf("expected %d products, got %d", len(expected), len(result))
+		t.Fatalf("expected %d employees, got %d", len(expected), len(result))
 	}
 	if result[0].Name != expected[0].Name {
 		t.Errorf("expected name %q, got %q", expected[0].Name, result[0].Name)
 	}
 }
 
-func TestListProductsReturnsError(t *testing.T) {
+func TestListEmployeesReturnsError(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("db error")
 	svc := NewService(&mockQuerier{listErr: wantErr})
 
-	_, err := svc.ListProducts(ctx)
+	_, err := svc.ListEmployees(ctx)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -72,12 +78,12 @@ func TestListProductsReturnsError(t *testing.T) {
 	}
 }
 
-func TestGetProductById(t *testing.T) {
+func TestGetEmployeeById(t *testing.T) {
 	ctx := context.Background()
-	expected := repository.Product{ID: 1, Name: "Widget", Price: 100, Quantity: 10}
+	expected := repository.Employee{ID: 1, Name: "John Doe", Email: "john@example.com", Department: "Engineering"}
 	svc := NewService(&mockQuerier{byID: expected})
 
-	result, err := svc.GetProductById(ctx, 1)
+	result, err := svc.GetEmployeeById(ctx, 1)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -89,88 +95,116 @@ func TestGetProductById(t *testing.T) {
 	}
 }
 
-func TestGetProductByIdReturnsError(t *testing.T) {
+func TestGetEmployeeByIdReturnsError(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("not found")
 	svc := NewService(&mockQuerier{getErr: wantErr})
 
-	_, err := svc.GetProductById(ctx, 1)
+	_, err := svc.GetEmployeeById(ctx, 1)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if err \!= wantErr {
+	if err != wantErr {
 		t.Errorf("expected %v, got %v", wantErr, err)
 	}
 }
 
-func TestAddProduct(t *testing.T) {
+func TestGetEmployeeByEmail(t *testing.T) {
+	ctx := context.Background()
+	expected := repository.Employee{ID: 1, Name: "John Doe", Email: "john@example.com", Department: "Engineering"}
+	svc := NewService(&mockQuerier{byEmail: expected})
+
+	result, err := svc.GetEmployeeByEmail(ctx, "john@example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.Email != expected.Email {
+		t.Errorf("expected email %q, got %q", expected.Email, result.Email)
+	}
+}
+
+func TestGetEmployeeByEmailReturnsError(t *testing.T) {
+	ctx := context.Background()
+	wantErr := errors.New("not found")
+	svc := NewService(&mockQuerier{getByEmailErr: wantErr})
+
+	_, err := svc.GetEmployeeByEmail(ctx, "john@example.com")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err != wantErr {
+		t.Errorf("expected %v, got %v", wantErr, err)
+	}
+}
+
+func TestAddEmployee(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService(&mockQuerier{})
 
-	err := svc.AddProduct(ctx, "Widget", 100, 10)
-	if err \!= nil {
+	err := svc.AddEmployee(ctx, "John Doe", "john@example.com", "Engineering")
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestAddProductReturnsError(t *testing.T) {
+func TestAddEmployeeReturnsError(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("insert failed")
 	svc := NewService(&mockQuerier{addErr: wantErr})
 
-	err := svc.AddProduct(ctx, "Widget", 100, 10)
+	err := svc.AddEmployee(ctx, "John Doe", "john@example.com", "Engineering")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if err \!= wantErr {
+	if err != wantErr {
 		t.Errorf("expected %v, got %v", wantErr, err)
 	}
 }
 
-func TestDeleteProduct(t *testing.T) {
+func TestDeleteEmployee(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService(&mockQuerier{})
 
-	err := svc.DeleteProduct(ctx, 1)
-	if err \!= nil {
+	err := svc.DeleteEmployee(ctx, 1)
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestDeleteProductReturnsError(t *testing.T) {
+func TestDeleteEmployeeReturnsError(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("delete failed")
 	svc := NewService(&mockQuerier{delErr: wantErr})
 
-	err := svc.DeleteProduct(ctx, 1)
+	err := svc.DeleteEmployee(ctx, 1)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if err \!= wantErr {
+	if err != wantErr {
 		t.Errorf("expected %v, got %v", wantErr, err)
 	}
 }
 
-func TestUpdateProduct(t *testing.T) {
+func TestUpdateEmployee(t *testing.T) {
 	ctx := context.Background()
 	svc := NewService(&mockQuerier{})
 
-	err := svc.UpdateProduct(ctx, 1, "Updated Widget", 200, 20)
-	if err \!= nil {
+	err := svc.UpdateEmployee(ctx, 1, "John Updated", "john.updated@example.com", "Engineering")
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
-func TestUpdateProductReturnsError(t *testing.T) {
+func TestUpdateEmployeeReturnsError(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("update failed")
 	svc := NewService(&mockQuerier{updateErr: wantErr})
 
-	err := svc.UpdateProduct(ctx, 1, "Updated Widget", 200, 20)
+	err := svc.UpdateEmployee(ctx, 1, "John Updated", "john.updated@example.com", "Engineering")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	if err \!= wantErr {
+	if err != wantErr {
 		t.Errorf("expected %v, got %v", wantErr, err)
 	}
 }

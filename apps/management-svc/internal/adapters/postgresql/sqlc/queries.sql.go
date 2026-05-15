@@ -9,49 +9,49 @@ import (
 	"context"
 )
 
-const addProduct = `-- name: AddProduct :exec
-INSERT INTO products (name, price, quantity) 
+const addEmployee = `-- name: AddEmployee :exec
+INSERT INTO employees (name, email, department) 
 VALUES ($1, $2, $3)
 `
 
-type AddProductParams struct {
-	Name     string `json:"name"`
-	Price    int32  `json:"price"`
-	Quantity int32  `json:"quantity"`
+type AddEmployeeParams struct {
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Department string `json:"department"`
 }
 
-func (q *Queries) AddProduct(ctx context.Context, arg AddProductParams) error {
-	_, err := q.db.Exec(ctx, addProduct, arg.Name, arg.Price, arg.Quantity)
+func (q *Queries) AddEmployee(ctx context.Context, arg AddEmployeeParams) error {
+	_, err := q.db.Exec(ctx, addEmployee, arg.Name, arg.Email, arg.Department)
 	return err
 }
 
-const deleteProduct = `-- name: DeleteProduct :exec
-DELETE FROM products WHERE id = $1
+const deleteEmployee = `-- name: DeleteEmployee :exec
+DELETE FROM employees WHERE id = $1
 `
 
-func (q *Queries) DeleteProduct(ctx context.Context, id int32) error {
-	_, err := q.db.Exec(ctx, deleteProduct, id)
+func (q *Queries) DeleteEmployee(ctx context.Context, id int32) error {
+	_, err := q.db.Exec(ctx, deleteEmployee, id)
 	return err
 }
 
-const listProducts = `-- name: ListProducts :many
-SELECT id, name, price, quantity, created_at FROM products
+const listEmployees = `-- name: ListEmployees :many
+SELECT id, name, email, department, created_at FROM employees
 `
 
-func (q *Queries) ListProducts(ctx context.Context) ([]Product, error) {
-	rows, err := q.db.Query(ctx, listProducts)
+func (q *Queries) ListEmployees(ctx context.Context) ([]Employee, error) {
+	rows, err := q.db.Query(ctx, listEmployees)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Product
+	var items []Employee
 	for rows.Next() {
-		var i Product
+		var i Employee
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.Price,
-			&i.Quantity,
+			&i.Email,
+			&i.Department,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -64,43 +64,61 @@ func (q *Queries) ListProducts(ctx context.Context) ([]Product, error) {
 	return items, nil
 }
 
-const productById = `-- name: ProductById :one
-SELECT id, name, price, quantity, created_at FROM products
+const employeeById = `-- name: EmployeeById :one
+SELECT id, name, email, department, created_at FROM employees
     WHERE id = $1
 `
 
-func (q *Queries) ProductById(ctx context.Context, id int32) (Product, error) {
-	row := q.db.QueryRow(ctx, productById, id)
-	var i Product
+func (q *Queries) EmployeeById(ctx context.Context, id int32) (Employee, error) {
+	row := q.db.QueryRow(ctx, employeeById, id)
+	var i Employee
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.Price,
-		&i.Quantity,
+		&i.Email,
+		&i.Department,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
-const updateProduct = `-- name: UpdateProduct :exec
-UPDATE products
-SET name = $2, price = $3, quantity = $4
+const employeeByEmail = `-- name: EmployeeByEmail :one
+SELECT id, name, email, department, created_at FROM employees
+    WHERE email = $1
+`
+
+func (q *Queries) EmployeeByEmail(ctx context.Context, email string) (Employee, error) {
+	row := q.db.QueryRow(ctx, employeeByEmail, email)
+	var i Employee
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Email,
+		&i.Department,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const updateEmployee = `-- name: UpdateEmployee :exec
+UPDATE employees
+SET name = $2, email = $3, department = $4
 WHERE id = $1
 `
 
-type UpdateProductParams struct {
-	ID       int32  `json:"id"`
-	Name     string `json:"name"`
-	Price    int32  `json:"price"`
-	Quantity int32  `json:"quantity"`
+type UpdateEmployeeParams struct {
+	ID         int32  `json:"id"`
+	Name       string `json:"name"`
+	Email      string `json:"email"`
+	Department string `json:"department"`
 }
 
-func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) error {
-	_, err := q.db.Exec(ctx, updateProduct,
+func (q *Queries) UpdateEmployee(ctx context.Context, arg UpdateEmployeeParams) error {
+	_, err := q.db.Exec(ctx, updateEmployee,
 		arg.ID,
 		arg.Name,
-		arg.Price,
-		arg.Quantity,
+		arg.Email,
+		arg.Department,
 	)
 	return err
 }

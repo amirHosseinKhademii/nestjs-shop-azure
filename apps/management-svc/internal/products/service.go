@@ -6,11 +6,12 @@ import (
 )
 
 type Service interface {
-	ListProducts(ctx context.Context) ([]repository.Product, error)
-	GetProductById(ctx context.Context, id int32) (repository.Product, error)
-	AddProduct(ctx context.Context, name string, price int32, quantity int32) error
-	DeleteProduct(ctx context.Context, id int32) error
-	UpdateProduct(ctx context.Context, id int32, name string, price int32, quantity int32) error
+	ListEmployees(ctx context.Context) ([]repository.Employee, error)
+	GetEmployeeById(ctx context.Context, id int32) (repository.Employee, error)
+	GetEmployeeByEmail(ctx context.Context, email string) (repository.Employee, error)
+	AddEmployee(ctx context.Context, name string, email string, department string) error
+	DeleteEmployee(ctx context.Context, id int32) error
+	UpdateEmployee(ctx context.Context, id int32, name string, email string, department string) error
 }
 
 type svc struct {
@@ -22,31 +23,35 @@ func NewService(repository repository.Querier) Service {
 	return &svc{repository}
 }
 
-func (s *svc) ListProducts(ctx context.Context) ([]repository.Product, error) {
-	return s.repository.ListProducts(ctx)
+func (s *svc) ListEmployees(ctx context.Context) ([]repository.Employee, error) {
+	return s.repository.ListEmployees(ctx)
 }
 
-func (s *svc) GetProductById(ctx context.Context, id int32) (repository.Product, error) {
-	return s.repository.ProductById(ctx, id)
+func (s *svc) GetEmployeeById(ctx context.Context, id int32) (repository.Employee, error) {
+	return s.repository.EmployeeById(ctx, id)
 }
 
-func (s *svc) AddProduct(ctx context.Context, name string, price int32, quantity int32) error {
-	return s.repository.AddProduct(ctx, repository.AddProductParams{
-		Name:     name,
-		Price:    price,
-		Quantity: quantity,
+func (s *svc) GetEmployeeByEmail(ctx context.Context, email string) (repository.Employee, error) {
+	return s.repository.EmployeeByEmail(ctx, email)
+}
+
+func (s *svc) AddEmployee(ctx context.Context, name string, email string, department string) error {
+	return s.repository.AddEmployee(ctx, repository.AddEmployeeParams{
+		Name:       name,
+		Email:      email,
+		Department: department,
 	})
 }
 
-func (s *svc) DeleteProduct(ctx context.Context, id int32) error {
-	return s.repository.DeleteProduct(ctx, id)
+func (s *svc) DeleteEmployee(ctx context.Context, id int32) error {
+	return s.repository.DeleteEmployee(ctx, id)
 }
 
-func (s *svc) UpdateProduct(ctx context.Context, id int32, name string, price int32, quantity int32) error {
-	return s.repository.UpdateProduct(ctx, repository.UpdateProductParams{
-		ID:       id,
-		Name:     name,
-		Price:    price,
-		Quantity: quantity,
+func (s *svc) UpdateEmployee(ctx context.Context, id int32, name string, email string, department string) error {
+	return s.repository.UpdateEmployee(ctx, repository.UpdateEmployeeParams{
+		ID:         id,
+		Name:       name,
+		Email:      email,
+		Department: department,
 	})
 }

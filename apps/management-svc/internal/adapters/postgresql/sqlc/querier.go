@@ -9,11 +9,12 @@ import (
 )
 
 type Querier interface {
-	AddProduct(ctx context.Context, arg AddProductParams) error
-	DeleteProduct(ctx context.Context, id int32) error
-	ListProducts(ctx context.Context) ([]Product, error)
-	ProductById(ctx context.Context, id int32) (Product, error)
-	UpdateProduct(ctx context.Context, arg UpdateProductParams) error
+	AddEmployee(ctx context.Context, arg AddEmployeeParams) error
+	DeleteEmployee(ctx context.Context, id int32) error
+	EmployeeByEmail(ctx context.Context, email string) (Employee, error)
+	EmployeeById(ctx context.Context, id int32) (Employee, error)
+	ListEmployees(ctx context.Context) ([]Employee, error)
+	UpdateEmployee(ctx context.Context, arg UpdateEmployeeParams) error
 }
 
 var _ Querier = (*Queries)(nil)

@@ -8,10 +8,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type Product struct {
-	ID        int32              `json:"id"`
-	Name      string             `json:"name"`
-	Price     int32              `json:"price"`
-	Quantity  int32              `json:"quantity"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
+type Employee struct {
+	ID         int32              `json:"id"`
+	Name       string             `json:"name"`
+	Email      string             `json:"email"`
+	Department string             `json:"department"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
 }

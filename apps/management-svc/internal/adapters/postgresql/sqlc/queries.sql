@@ -1,18 +1,22 @@
--- name: ListProducts :many
-SELECT * FROM products;
+-- name: ListEmployees :many
+SELECT * FROM employees;
 
--- name: ProductById :one
-SELECT * FROM products
+-- name: EmployeeById :one
+SELECT * FROM employees
     WHERE id = $1;
 
--- name: AddProduct :exec
-INSERT INTO products (name, price, quantity) 
+-- name: EmployeeByEmail :one
+SELECT * FROM employees
+    WHERE email = $1;
+
+-- name: AddEmployee :exec
+INSERT INTO employees (name, email, department) 
 VALUES ($1, $2, $3);
 
--- name: DeleteProduct :exec
-DELETE FROM products WHERE id = $1;
+-- name: DeleteEmployee :exec
+DELETE FROM employees WHERE id = $1;
 
--- name: UpdateProduct :exec
-UPDATE products
-SET name = $2, price = $3, quantity = $4
+-- name: UpdateEmployee :exec
+UPDATE employees
+SET name = $2, email = $3, department = $4
 WHERE id = $1;
