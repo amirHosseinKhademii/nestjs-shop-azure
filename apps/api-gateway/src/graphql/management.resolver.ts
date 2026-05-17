@@ -85,7 +85,13 @@ export class ManagementResolver {
     @Context() ctx: GatewayGraphqlContext,
   ) {
     const res = await (this.backends.management as any).PUT('/employees/{id}', {
-      params: { path: { id: String(id) }, header: { 'x-user-id': ctx.req.user?.sub ?? '', ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}) } },
+      params: {
+        path: { id: String(id) },
+        header: {
+          'x-user-id': ctx.req.user?.sub ?? '',
+          ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}),
+        },
+      },
       body: { name, email, department },
     });
     const updated = unwrapOrThrow(res) as any;
@@ -101,9 +107,18 @@ export class ManagementResolver {
 
   @Mutation(() => Boolean)
   @UseGuards(GqlJwtGuard)
-  async deleteEmployee(@Args('id', { type: () => Int }) id: number, @Context() ctx: GatewayGraphqlContext) {
+  async deleteEmployee(
+    @Args('id', { type: () => Int }) id: number,
+    @Context() ctx: GatewayGraphqlContext,
+  ) {
     const res = await (this.backends.management as any).DELETE('/employees/{id}', {
-      params: { path: { id: String(id) }, header: { 'x-user-id': ctx.req.user?.sub ?? '', ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}) } },
+      params: {
+        path: { id: String(id) },
+        header: {
+          'x-user-id': ctx.req.user?.sub ?? '',
+          ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}),
+        },
+      },
     });
     return !res.error;
   }

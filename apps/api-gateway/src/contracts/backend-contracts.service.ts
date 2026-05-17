@@ -4,7 +4,10 @@ import { createUserSvcClient, type UserSvcOpenApiClient } from '@shop/user-svc-c
 import { createShopSvcClient, type ShopSvcOpenApiClient } from '@shop/shop-svc-contract';
 import { createOrderSvcClient, type OrderSvcOpenApiClient } from '@shop/order-svc-contract';
 import { createTaskSvcClient, type TaskSvcOpenApiClient } from '@shop/task-svc-contract';
-import { createManagementSvcClient, type ManagementSvcOpenApiClient } from '@shop/management-svc-contract';
+import {
+  createManagementSvcClient,
+  type ManagementSvcOpenApiClient,
+} from '@shop/management-svc-contract';
 
 @Injectable()
 export class BackendContractsService {
