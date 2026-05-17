@@ -119,16 +119,16 @@ func (h *handler) AddEmployeeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) UpdateEmployeeHandler(w http.ResponseWriter, r *http.Request) {
-    // Support direct handler calls in tests where chi URL params may not be set
-    // Fallback to extracting the ID from the request URL path if chi.URLParam is empty
-    param := chi.URLParam(r, "id")
-    if param == "" {
-        // Expect path like /employees/{id}
-        parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-        if len(parts) >= 2 {
-            param = parts[len(parts)-1]
-        }
-    }
+	// Support direct handler calls in tests where chi URL params may not be set
+	// Fallback to extracting the ID from the request URL path if chi.URLParam is empty
+	param := chi.URLParam(r, "id")
+	if param == "" {
+		// Expect path like /employees/{id}
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) >= 2 {
+			param = parts[len(parts)-1]
+		}
+	}
 
 	parsedId, err := strconv.ParseInt(param, 10, 32)
 	var id int32 = int32(parsedId)
