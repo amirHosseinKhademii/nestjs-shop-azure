@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-playground/validator/v10"
+	"strings"
 )
 
 var validate = validator.New()
@@ -38,7 +39,13 @@ func (h *handler) ListEmployeesHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *handler) GetEmployeeById(w http.ResponseWriter, r *http.Request) {
 	param := chi.URLParam(r, "id")
-	parsedId, err := strconv.ParseInt(param, 16, 32)
+	if param == "" {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) >= 2 {
+			param = parts[len(parts)-1]
+		}
+	}
+	parsedId, err := strconv.ParseInt(param, 10, 32)
 	var id int32 = int32(parsedId)
 	employee, err := h.service.GetEmployeeById(r.Context(), id)
 	if err != nil {
@@ -112,8 +119,18 @@ func (h *handler) AddEmployeeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) UpdateEmployeeHandler(w http.ResponseWriter, r *http.Request) {
-	param := chi.URLParam(r, "id")
-	parsedId, err := strconv.ParseInt(param, 16, 32)
+    // Support direct handler calls in tests where chi URL params may not be set
+    // Fallback to extracting the ID from the request URL path if chi.URLParam is empty
+    param := chi.URLParam(r, "id")
+    if param == "" {
+        // Expect path like /employees/{id}
+        parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+        if len(parts) >= 2 {
+            param = parts[len(parts)-1]
+        }
+    }
+
+	parsedId, err := strconv.ParseInt(param, 10, 32)
 	var id int32 = int32(parsedId)
 
 	var req AddEmployeeRequest
@@ -151,7 +168,13 @@ func (h *handler) UpdateEmployeeHandler(w http.ResponseWriter, r *http.Request) 
 
 func (h *handler) DeleteEmployeeHandler(w http.ResponseWriter, r *http.Request) {
 	param := chi.URLParam(r, "id")
-	parsedId, err := strconv.ParseInt(param, 16, 32)
+	if param == "" {
+		parts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
+		if len(parts) >= 2 {
+			param = parts[len(parts)-1]
+		}
+	}
+	parsedId, err := strconv.ParseInt(param, 10, 32)
 	var id int32 = int32(parsedId)
 
 	err = h.service.DeleteEmployee(r.Context(), id)
