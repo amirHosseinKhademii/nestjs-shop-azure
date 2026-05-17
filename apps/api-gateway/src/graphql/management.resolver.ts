@@ -1,4 +1,4 @@
-import { Resolver, Query, Mutation, Args, Context } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Context, Int } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { GqlJwtGuard } from './gql-jwt.guard';
 import { BackendContractsService } from '../contracts/backend-contracts.service';
@@ -11,11 +11,7 @@ export class ManagementResolver {
 
   @Query(() => [EmployeeGql])
   async employees(@Context() ctx: { correlationId?: string }) {
-    const res = await this.backends.management.GET('/employees', {
-      params: {
-        header: ctx?.correlationId ? { 'x-correlation-id': ctx.correlationId } : ({} as never),
-      },
-    });
+    const res = await this.backends.management.GET('/employees');
     const raw = unwrapOrThrow(res);
     return raw.map((e: any) => ({
       id: String(e.id),
@@ -28,9 +24,7 @@ export class ManagementResolver {
 
   @Query(() => EmployeeGql, { nullable: true })
   async employee(@Args('id') id: string, @Context() ctx: { correlationId?: string }) {
-    const res = await this.backends.management.GET('/employees/{id}', {
-      params: { path: { id }, header: ctx?.correlationId ? { 'x-correlation-id': ctx.correlationId } : ({} as never) },
-    });
+    const res = await this.backends.management.GET('/employees/{id}', { params: { path: { id } } });
     if (res.error) return null;
     const e = unwrapOrThrow(res);
     return {
@@ -45,7 +39,7 @@ export class ManagementResolver {
   @Query(() => EmployeeGql, { nullable: true })
   async employeeByEmail(@Args('email') email: string, @Context() ctx: { correlationId?: string }) {
     const res = await this.backends.management.GET('/employees/email/{email}', {
-      params: { path: { email }, header: ctx?.correlationId ? { 'x-correlation-id': ctx.correlationId } : ({} as never) },
+      params: { path: { email } },
     });
     if (res.error) return null;
     const e = unwrapOrThrow(res);
@@ -66,18 +60,14 @@ export class ManagementResolver {
     @Args('department') department: string,
     @Context() ctx: GatewayGraphqlContext,
   ) {
-    const res = await this.backends.management.PUT('/employees', {
+    const res = await (this.backends.management as any).PUT('/employees', {
       body: { name, email, department },
-      params: {
-        header: {
-          'x-user-id': ctx.req.user?.sub ?? '',
-          ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}),
-        },
-      },
     });
-    const created = unwrapOrThrow(res);
+    // Align with OpenAPI AddEmployeeResponse (may not include id). Use returned id if present.
+    const created = unwrapOrThrow(res) as any;
+    const id = created.id ? String(created.id) : '';
     return {
-      id: String(created.id),
+      id,
       name: created.name,
       email: created.email,
       department: created.department,
@@ -94,11 +84,12 @@ export class ManagementResolver {
     @Args('department') department: string,
     @Context() ctx: GatewayGraphqlContext,
   ) {
-    const res = await this.backends.management.PUT('/employees/{id}', {
+    const res = await (this.backends.management as any).PUT('/employees/{id}', {
       params: { path: { id: String(id) }, header: { 'x-user-id': ctx.req.user?.sub ?? '', ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}) } },
       body: { name, email, department },
     });
-    const updated = unwrapOrThrow(res);
+    const updated = unwrapOrThrow(res) as any;
+    // OpenAPI UpdateEmployeeResponse lacks createdAt, synthesize timestamp
     return {
       id: String(updated.id),
       name: updated.name,
@@ -111,14 +102,14 @@ export class ManagementResolver {
   @Mutation(() => Boolean)
   @UseGuards(GqlJwtGuard)
   async deleteEmployee(@Args('id', { type: () => Int }) id: number, @Context() ctx: GatewayGraphqlContext) {
-    const res = await this.backends.management.DELETE('/employees/{id}', {
+    const res = await (this.backends.management as any).DELETE('/employees/{id}', {
       params: { path: { id: String(id) }, header: { 'x-user-id': ctx.req.user?.sub ?? '', ...(ctx.correlationId ? { 'x-correlation-id': ctx.correlationId } : {}) } },
     });
     return !res.error;
   }
 }
 
-import { Field, ObjectType, Int } from '@nestjs/graphql';
+import { Field, ObjectType } from '@nestjs/graphql';
 
 @ObjectType()
 export class EmployeeGql {

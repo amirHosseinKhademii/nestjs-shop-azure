@@ -44,7 +44,7 @@ export class BackendContractsService {
   get task() {
     return (this.taskClient ??= createTaskSvcClient(this.taskBase));
   }
-  get management() {
+  get management(): ManagementSvcOpenApiClient {
     return (this.managementClient ??= createManagementSvcClient(this.managementBase));
   }
 }
