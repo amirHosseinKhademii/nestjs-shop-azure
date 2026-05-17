@@ -21,6 +21,7 @@ resources:
 - shop-svc.yaml
 - order-svc.yaml
 - task-svc.yaml
+- management-svc.yaml
 - api-gateway.yaml
 - web.yaml
 - ingress.yaml

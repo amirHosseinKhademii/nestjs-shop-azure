@@ -108,6 +108,13 @@ const children = [
     // which already sets ASPNETCORE_ENVIRONMENT=Development and binds 3004.
     args: ['run', '--project', 'apps/task-svc'],
   }),
+  spawnLabeled({
+    name: 'mgmt',
+    color: colors.cyan,
+    command: 'go',
+    args: ['run', './cmd'],
+    env: { GOFLAGS: '-mod=mod' },
+  }),
 ];
 
 // Forward Ctrl-C / SIGTERM to both children, then exit when all are gone.

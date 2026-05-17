@@ -11,6 +11,7 @@ import { AuthResolver } from './graphql/auth.resolver';
 import { ShopResolver } from './graphql/shop.resolver';
 import { OrderResolver } from './graphql/order.resolver';
 import { TasksResolver } from './graphql/tasks.resolver';
+import { ManagementResolver } from './graphql/management.resolver';
 import { BackendContractsService } from './contracts/backend-contracts.service';
 import { GqlJwtGuard } from './graphql/gql-jwt.guard';
 import { GqlThrottlerGuard } from './graphql/gql-throttler.guard';
@@ -87,6 +88,7 @@ const apiGatewayEnv = join(__dirname, '..', '.env');
     ShopResolver,
     OrderResolver,
     TasksResolver,
+    ManagementResolver,
     BackendContractsService,
     GqlJwtGuard,
     { provide: APP_GUARD, useClass: GqlThrottlerGuard },

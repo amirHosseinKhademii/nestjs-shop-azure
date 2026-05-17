@@ -58,7 +58,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SERVICES: '["api-gateway","user-svc","shop-svc","order-svc","task-svc","web"]'
+  SERVICES: '["api-gateway","user-svc","shop-svc","order-svc","task-svc","management-svc","web"]'
 
 jobs:
   # ─── Stage 1 ─ Workspace-level format check ───────────────────────────────
@@ -124,7 +124,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, web]
+        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, management-svc, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -132,8 +132,14 @@ jobs:
           fetch-depth: 2
 
       - name: Setup Node 24 + pnpm + install
-        if: matrix.service != 'task-svc'
+        if: matrix.service != 'task-svc' && matrix.service != 'management-svc'
         uses: ./.github/actions/setup-pnpm-node
+
+      - name: Setup Go
+        if: matrix.service == 'management-svc'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
 
       - name: Setup .NET 10
         if: matrix.service == 'task-svc'
@@ -142,7 +148,7 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore Turbo cache
-        if: matrix.service != 'task-svc'
+        if: matrix.service != 'task-svc' && matrix.service != 'management-svc'
         uses: actions/cache@v5
         with:
           path: .turbo
@@ -151,8 +157,33 @@ jobs:
             turbo-${{ runner.os }}-${{ matrix.service }}-
 
       - name: Lint + typecheck + test (turbo)
-        if: matrix.service != 'task-svc'
+        if: matrix.service != 'task-svc' && matrix.service != 'management-svc'
         run: pnpm exec turbo run lint typecheck test --filter=@shop/${{ matrix.service }}
+
+      - name: Cache Go modules
+        if: matrix.service == 'management-svc'
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ runner.os }}-${{ matrix.service }}-${{ hashFiles('apps/management-svc/go.sum') }}
+          restore-keys: |
+            go-${{ runner.os }}-${{ matrix.service }}-
+
+      - name: Verify Go code (management-svc)
+        if: matrix.service == 'management-svc'
+        working-directory: apps/management-svc
+        run: |
+          set -euo pipefail
+          go vet ./...
+          go build ./...
+          go test -v -count=1 ./...
+
+      - name: Format check (Go)
+        if: matrix.service == 'management-svc'
+        working-directory: apps/management-svc
+        run: gofmt -s -l -d . | grep -q . && exit 1 || true
 
       - name: Cache NuGet packages
         if: matrix.service == 'task-svc'
@@ -199,7 +230,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, web]
+        service: [api-gateway, user-svc, shop-svc, order-svc, task-svc, management-svc, web]
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -207,8 +238,14 @@ jobs:
           fetch-depth: 2
 
       - name: Setup Node 24 + pnpm + install
-        if: matrix.service != 'task-svc'
+        if: matrix.service != 'task-svc' && matrix.service != 'management-svc'
         uses: ./.github/actions/setup-pnpm-node
+
+      - name: Setup Go
+        if: matrix.service == 'management-svc'
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
 
       - name: Setup .NET 10
         if: matrix.service == 'task-svc'
@@ -217,6 +254,20 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore Turbo cache
+        if: matrix.service != 'task-svc' && matrix.service != 'management-svc'
+        uses: actions/cache@v5
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ matrix.service }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ matrix.service }}-
+
+      - name: Build Go (management-svc)
+        if: matrix.service == 'management-svc'
+        working-directory: apps/management-svc
+        run: go build ./...
+
+      - name: Cache NuGet packages
         if: matrix.service != 'task-svc'
         uses: actions/cache@v5
         with:

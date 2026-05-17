@@ -59,6 +59,8 @@ images:
     newTag: main
   - name: docker.io/amir2575/shop-task-svc
     newTag: main
+  - name: docker.io/amir2575/shop-management-svc
+    newTag: main
   - name: docker.io/amir2575/shop-web
     newTag: main
 

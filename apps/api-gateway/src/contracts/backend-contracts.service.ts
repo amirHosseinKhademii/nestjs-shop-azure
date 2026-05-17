@@ -4,6 +4,10 @@ import { createUserSvcClient, type UserSvcOpenApiClient } from '@shop/user-svc-c
 import { createShopSvcClient, type ShopSvcOpenApiClient } from '@shop/shop-svc-contract';
 import { createOrderSvcClient, type OrderSvcOpenApiClient } from '@shop/order-svc-contract';
 import { createTaskSvcClient, type TaskSvcOpenApiClient } from '@shop/task-svc-contract';
+import {
+  createManagementSvcClient,
+  type ManagementSvcOpenApiClient,
+} from '@shop/management-svc-contract';
 
 @Injectable()
 export class BackendContractsService {
@@ -11,6 +15,7 @@ export class BackendContractsService {
   private shopClient?: ShopSvcOpenApiClient;
   private orderClient?: OrderSvcOpenApiClient;
   private taskClient?: TaskSvcOpenApiClient;
+  private managementClient?: ManagementSvcOpenApiClient;
 
   constructor(private readonly config: ConfigService) {}
 
@@ -26,6 +31,9 @@ export class BackendContractsService {
   private get taskBase() {
     return this.config.get('TASK_SVC_URL', 'http://localhost:3004');
   }
+  private get managementBase() {
+    return this.config.get('MANAGEMENT_SVC_URL', 'http://localhost:3010');
+  }
 
   get user() {
     return (this.userClient ??= createUserSvcClient(this.userBase));
@@ -38,5 +46,8 @@ export class BackendContractsService {
   }
   get task() {
     return (this.taskClient ??= createTaskSvcClient(this.taskBase));
+  }
+  get management(): ManagementSvcOpenApiClient {
+    return (this.managementClient ??= createManagementSvcClient(this.managementBase));
   }
 }

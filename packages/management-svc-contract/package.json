@@ -1,0 +1,21 @@
+{
+  "name": "@shop/management-svc-contract",
+  "version": "0.0.1",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "codegen": "echo 'skip codegen'",
+    "prebuild": "pnpm run codegen",
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src --ext .ts --ignore-pattern 'src/generated/**' || true",
+    "typecheck": "pnpm run codegen && tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0",
+    "typescript": "^5.7.2"
+  },
+  "dependencies": {
+    "openapi-fetch": "^0.13.5"
+  }
+}

@@ -32,14 +32,25 @@ input CreateTaskInputGql {
   title: String!
 }
 
+type EmployeeGql {
+  createdAt: String!
+  department: String!
+  email: String!
+  id: String!
+  name: String!
+}
+
 type Mutation {
   addToCart(productId: String!, qty: Int!): CartGql!
   checkout: CheckoutResultGql!
+  createEmployee(department: String!, email: String!, name: String!): EmployeeGql!
   createProduct(description: String, name: String!, priceCents: Int!, stock: Int): ProductGql!
   createTask(input: CreateTaskInputGql!): TaskGql!
+  deleteEmployee(id: Int!): Boolean!
   deleteTask(id: String!): Boolean!
   login(email: String!, password: String!): AuthPayloadGql!
   register(displayName: String, email: String!, password: String!): AuthPayloadGql!
+  updateEmployee(department: String!, email: String!, id: Int!, name: String!): EmployeeGql!
   updateTask(id: String!, input: UpdateTaskInputGql!): TaskGql!
 }
 
@@ -69,6 +80,9 @@ type ProductGql {
 
 type Query {
   cart: CartGql!
+  employee(id: String!): EmployeeGql
+  employeeByEmail(email: String!): EmployeeGql
+  employees: [EmployeeGql!]!
   me: UserGql!
   order(id: String!): OrderGql
   orders: [OrderGql!]!
